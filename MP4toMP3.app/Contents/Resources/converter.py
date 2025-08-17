@@ -255,21 +255,18 @@ class ModernMP4Converter:
         )
         self.status_label.pack(side=tk.LEFT)
         
-        # 설치 버튼 (필요시 표시)
-        self.install_button = tk.Button(
+        # 설치 버튼 (RoundedButton 스타일)
+        self.install_button = RoundedButton(
             self.install_status_frame,
+            width=120,
+            height=40,
+            corner_radius=10,
             text="설치하기",
+            bg_color=self.colors['accent'],
+            fg_color='white',
+            hover_color=self.colors['accent_hover'],
             font=('SF Pro Display', 11, 'bold'),
-            bg=self.colors['accent'],
-            fg='white',
-            relief=tk.RAISED,
-            bd=2,
-            padx=20,
-            pady=5,
-            command=self.install_whisper,
-            cursor='hand2',
-            activebackground='#e63600',
-            activeforeground='white'
+            command=self.install_whisper
         )
         # 초기에는 숨김
         

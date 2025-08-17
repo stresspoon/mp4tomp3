@@ -1,2 +1,0 @@
-MP4toMP3.app/Contents/MacOS/ffmpeg filter=lfs diff=lfs merge=lfs -text
-Windows_Standalone/ffmpeg.exe filter=lfs diff=lfs merge=lfs -text

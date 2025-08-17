@@ -24,11 +24,12 @@ MP4 to MP3 Converter
 3. 변환 시작 버튼을 클릭합니다
 4. MP3 파일이 원본과 같은 위치에 저장됩니다
 
-참고: ffmpeg는 앱에 포함되어 있어 추가 설치가 필요 없습니다.
+참고: ffmpeg가 필요합니다. 
+설치되어 있지 않다면: brew install ffmpeg
 EOF
 
 # Create DMG
-hdiutil create -volname "MP4toMP3" -srcfolder dmg_temp -ov -format ULFO MP4toMP3_Installer.dmg
+hdiutil create -volname "MP4toMP3" -srcfolder dmg_temp -ov -format UDZO MP4toMP3_Installer.dmg
 
 # Clean up
 rm -rf dmg_temp

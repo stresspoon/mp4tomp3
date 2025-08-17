@@ -43,6 +43,7 @@ pyinstaller --onefile ^
             --windowed ^
             --name="MP4toMP3" ^
             --add-binary="ffmpeg.exe;." ^
+            --add-data="Pretendard.ttf;." ^
             --hidden-import="tkinter" ^
             --hidden-import="tkinter.ttk" ^
             --hidden-import="tkinter.filedialog" ^

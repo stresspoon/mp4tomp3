@@ -9,13 +9,134 @@ import sys
 import time
 import platform
 import re
+import urllib.request
+import webbrowser
+import ctypes
+from ctypes import wintypes
+
+_WHISPER_MODEL_CACHE = {}
+
+def ensure_pretendard(app_dir: str) -> str:
+    """Ensure Pretendard.ttf exists; try download if missing. Register on Windows so Tk can use it."""
+    try:
+        meipass_dir = getattr(sys, '_MEIPASS', None)
+        candidates = [
+            os.path.join(app_dir, 'Pretendard.ttf'),
+            os.path.join(app_dir, 'PretendardVariable.ttf'),
+        ]
+        if meipass_dir:
+            candidates += [
+                os.path.join(meipass_dir, 'Pretendard.ttf'),
+                os.path.join(meipass_dir, 'PretendardVariable.ttf'),
+            ]
+        font_path = ''
+        for p in candidates:
+            if os.path.isfile(p):
+                font_path = p
+                break
+        if not font_path:
+            url = 'https://github.com/orioncactus/pretendard/releases/latest/download/PretendardVariable.ttf'
+            target = os.path.join(app_dir, 'Pretendard.ttf')
+            try:
+                urllib.request.urlretrieve(url, target)
+                if os.path.isfile(target) and os.path.getsize(target) > 0:
+                    font_path = target
+            except Exception:
+                pass
+        if font_path and platform.system() == 'Windows':
+            try:
+                FR_PRIVATE = 0x10
+                gdi32 = ctypes.WinDLL('gdi32', use_last_error=True)
+                AddFontResourceExW = gdi32.AddFontResourceExW
+                AddFontResourceExW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.PVOID]
+                AddFontResourceExW.restype = wintypes.INT
+                AddFontResourceExW(font_path, FR_PRIVATE, None)
+                user32 = ctypes.WinDLL('user32', use_last_error=True)
+                SendMessageTimeoutW = user32.SendMessageTimeoutW
+                HWND_BROADCAST = 0xFFFF
+                WM_FONTCHANGE = 0x001D
+                SMTO_ABORTIFHUNG = 0x0002
+                SendMessageTimeoutW(HWND_BROADCAST, WM_FONTCHANGE, 0, 0, SMTO_ABORTIFHUNG, 100, None)
+            except Exception:
+                pass
+        return font_path or ''
+    except Exception:
+        return ''
+
+def get_system_info():
+    info = {'has_cuda': False, 'vram_gb': None, 'ram_gb': None}
+    try:
+        import psutil  # type: ignore
+        info['ram_gb'] = round(psutil.virtual_memory().total / (1024 ** 3), 1)
+    except Exception:
+        try:
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ('dwLength', wintypes.DWORD),
+                    ('dwMemoryLoad', wintypes.DWORD),
+                    ('ullTotalPhys', ctypes.c_ulonglong),
+                    ('ullAvailPhys', ctypes.c_ulonglong),
+                    ('ullTotalPageFile', ctypes.c_ulonglong),
+                    ('ullAvailPageFile', ctypes.c_ulonglong),
+                    ('ullTotalVirtual', ctypes.c_ulonglong),
+                    ('ullAvailVirtual', ctypes.c_ulonglong),
+                    ('ullAvailExtendedVirtual', ctypes.c_ulonglong),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            info['ram_gb'] = round(stat.ullTotalPhys / (1024 ** 3), 1)
+        except Exception:
+            info['ram_gb'] = None
+    try:
+        import torch  # type: ignore
+        info['has_cuda'] = torch.cuda.is_available()
+        if info['has_cuda']:
+            props = torch.cuda.get_device_properties(0)
+            info['vram_gb'] = round(props.total_memory / (1024 ** 3), 1)
+    except Exception:
+        info['has_cuda'] = False
+        info['vram_gb'] = None
+    return info
+
+def recommend_model(system_info):
+    ram = system_info.get('ram_gb') or 0
+    vram = system_info.get('vram_gb') or 0
+    has_cuda = bool(system_info.get('has_cuda'))
+    if has_cuda and vram >= 10 and ram >= 16:
+        return 'large-v3'
+    if has_cuda and vram >= 6 and ram >= 12:
+        return 'medium'
+    if ram >= 8:
+        return 'small'
+    if ram >= 4:
+        return 'base'
+    return 'tiny'
+
+def load_whisper_model(model_name: str):
+    global _WHISPER_MODEL_CACHE
+    try:
+        import torch  # type: ignore
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    except Exception:
+        device = 'cpu'
+    try:
+        import whisper  # type: ignore
+    except Exception as e:
+        raise RuntimeError('Whisper 라이브러리가 설치되어 있지 않습니다.') from e
+    key = f'{model_name}:{device}'
+    if key in _WHISPER_MODEL_CACHE:
+        return _WHISPER_MODEL_CACHE[key]
+    model = whisper.load_model(model_name, device=device)
+    _WHISPER_MODEL_CACHE[key] = (model, device)
+    return _WHISPER_MODEL_CACHE[key]
 
 class MP4toMP3Converter:
     def __init__(self, root):
         self.root = root
         self.root.title("MP4 to MP3 Converter")
-        self.root.geometry("650x500")
-        self.root.configure(bg='#f0f0f0')
+        self.root.geometry("720x620")
+        self.root.configure(bg='#f2f1ef')
         
         # Make window stay on top initially
         self.root.lift()
@@ -30,25 +151,33 @@ class MP4toMP3Converter:
         self.setup_ui()
         
     def setup_ui(self):
-        # Title
-        title_frame = tk.Frame(self.root, bg='#f0f0f0')
-        title_frame.pack(pady=20)
+        # Title / Theme / Font setup
+        title_frame = tk.Frame(self.root, bg='#f2f1ef')
+        title_frame.pack(pady=16)
         
         # Use different font based on OS
-        if platform.system() == 'Darwin':
-            font_family = 'SF Pro Display'
-        elif platform.system() == 'Windows':
-            font_family = 'Segoe UI'
+        if getattr(sys, 'frozen', False):
+            app_dir = os.path.dirname(sys.executable)
         else:
-            font_family = 'Arial'
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+        ensure_pretendard(app_dir)
+        if platform.system() == 'Windows':
+            font_family = 'Pretendard'
+        elif platform.system() == 'Darwin':
+            font_family = 'Pretendard'
+        else:
+            font_family = 'Pretendard'
             
         title_label = tk.Label(
             title_frame,
             text="MP4 → MP3 변환기",
             font=(font_family, 24, 'bold'),
-            bg='#f0f0f0'
+            bg='#f2f1ef',
+            fg='#131313'
         )
         title_label.pack()
+        sub_label = tk.Label(title_frame, text="by AIXLIFE", font=(font_family, 10), bg='#f2f1ef', fg='#131313')
+        sub_label.pack(pady=(2, 0))
         
         # Drop zone
         self.drop_frame = tk.Frame(
@@ -59,14 +188,14 @@ class MP4toMP3Converter:
             highlightbackground='#e0e0e0',
             highlightthickness=2
         )
-        self.drop_frame.pack(padx=40, pady=20, fill=tk.BOTH, expand=True)
+        self.drop_frame.pack(padx=24, pady=12, fill=tk.BOTH, expand=True)
         
         self.drop_label = tk.Label(
             self.drop_frame,
             text="🎵\n\nMP4 파일을 선택하세요\n클릭하여 파일 선택",
             font=(font_family, 14),
             bg='white',
-            fg='#666666'
+            fg='#131313'
         )
         self.drop_label.pack(expand=True)
         
@@ -74,15 +203,42 @@ class MP4toMP3Converter:
         self.drop_frame.bind("<Button-1>", lambda e: self.select_files())
         self.drop_label.bind("<Button-1>", lambda e: self.select_files())
         
+        # Model / STT options
+        options_frame = tk.Frame(self.root, bg='#f2f1ef')
+        options_frame.pack(padx=24, pady=(0, 8), fill=tk.X)
+        tk.Label(options_frame, text='Whisper 모델', font=(font_family, 12, 'bold'), bg='#f2f1ef', fg='#131313').pack(side=tk.LEFT)
+        self.model_var = tk.StringVar()
+        self.model_combo = ttk.Combobox(options_frame, textvariable=self.model_var, state='readonly', values=['tiny','base','small','medium','large-v3'], width=12)
+        self.model_combo.pack(side=tk.LEFT, padx=(10, 12))
+        sys_info = get_system_info()
+        self.model_recommended = recommend_model(sys_info)
+        self.model_var.set(self.model_recommended)
+        self.enable_stt = tk.BooleanVar(value=False)
+        tk.Label(options_frame, text=f"추천: {self.model_recommended} (RAM: {sys_info.get('ram_gb','?')}GB, VRAM: {sys_info.get('vram_gb','?')}GB)", font=(font_family, 10), bg='#f2f1ef', fg='#131313').pack(side=tk.LEFT)
+        self.stt_check = tk.Checkbutton(options_frame, text='STT (텍스트 생성)', variable=self.enable_stt, bg='#f2f1ef', fg='#131313', selectcolor='#f2f1ef', activebackground='#f2f1ef')
+        self.stt_check.pack(side=tk.RIGHT)
+        info_frame = tk.Frame(self.root, bg='#f2f1ef')
+        info_frame.pack(padx=24, pady=(0,8), fill=tk.X)
+        info_text = (
+            "모델 안내 — 대략적 경향\n"
+            "tiny: 가장 빠름 / 낮은 정확도 / ~1GB RAM\n"
+            "base: 빠름 / 보통 정확도 / ~2-3GB RAM\n"
+            "small: 보통 / 높은 정확도 / ~4-6GB RAM\n"
+            "medium: 다소 느림 / 더 높은 정확도 / ~8-12GB RAM, CUDA 권장\n"
+            "large-v3: 가장 느림 / 최고 정확도 / >=16GB RAM, >=10GB VRAM 권장"
+        )
+        tk.Label(info_frame, text=info_text, font=(font_family, 9), justify=tk.LEFT, bg='#f2f1ef', fg='#131313').pack(anchor='w')
+
         # Progress frame (hidden initially)
-        self.progress_frame = tk.Frame(self.root, bg='#f0f0f0')
+        self.progress_frame = tk.Frame(self.root, bg='#f2f1ef')
         
         # Overall progress
         self.overall_label = tk.Label(
             self.progress_frame,
             text="전체 진행률",
             font=(font_family, 14, 'bold'),
-            bg='#f0f0f0'
+            bg='#f2f1ef',
+            fg='#131313'
         )
         self.overall_label.pack(pady=(10, 5))
         
@@ -98,8 +254,8 @@ class MP4toMP3Converter:
             self.progress_frame,
             text="0%",
             font=(font_family, 20, 'bold'),
-            bg='#f0f0f0',
-            fg='#007AFF'
+            bg='#f2f1ef',
+            fg='#ff3d00'
         )
         self.overall_percent.pack(pady=5)
         
@@ -108,7 +264,8 @@ class MP4toMP3Converter:
             self.progress_frame,
             text="현재 파일",
             font=(font_family, 12),
-            bg='#f0f0f0'
+            bg='#f2f1ef',
+            fg='#131313'
         )
         self.current_label.pack(pady=(20, 5))
         
@@ -124,21 +281,21 @@ class MP4toMP3Converter:
             self.progress_frame,
             text="",
             font=(font_family, 10),
-            bg='#f0f0f0',
-            fg='#666666'
+            bg='#f2f1ef',
+            fg='#131313'
         )
         self.file_label.pack(pady=5)
         
         # Time estimation
-        self.time_frame = tk.Frame(self.progress_frame, bg='#f0f0f0')
+        self.time_frame = tk.Frame(self.progress_frame, bg='#f2f1ef')
         self.time_frame.pack(pady=10)
         
         self.elapsed_label = tk.Label(
             self.time_frame,
             text="경과 시간: 00:00",
             font=(font_family, 10),
-            bg='#f0f0f0',
-            fg='#666666'
+            bg='#f2f1ef',
+            fg='#131313'
         )
         self.elapsed_label.pack(side=tk.LEFT, padx=10)
         
@@ -146,8 +303,8 @@ class MP4toMP3Converter:
             self.time_frame,
             text="예상 남은 시간: 계산 중...",
             font=(font_family, 10),
-            bg='#f0f0f0',
-            fg='#666666'
+            bg='#f2f1ef',
+            fg='#131313'
         )
         self.remaining_label.pack(side=tk.LEFT, padx=10)
         
@@ -156,20 +313,20 @@ class MP4toMP3Converter:
             self.progress_frame,
             text="",
             font=(font_family, 11),
-            bg='#f0f0f0',
-            fg='#34C759'
+            bg='#f2f1ef',
+            fg='#131313'
         )
         self.status_label.pack(pady=10)
         
         # Button frame
-        button_frame = tk.Frame(self.root, bg='#f0f0f0')
+        button_frame = tk.Frame(self.root, bg='#f2f1ef')
         button_frame.pack(pady=20)
         
         self.convert_button = tk.Button(
             button_frame,
             text="변환 시작",
             font=(font_family, 14, 'bold'),
-            bg='#007AFF',
+            bg='#ff3d00',
             fg='white',
             padx=30,
             pady=10,
@@ -200,10 +357,10 @@ class MP4toMP3Converter:
         style.theme_use('default')
         style.configure('green.Horizontal.TProgressbar', 
                        troughcolor='#e0e0e0',
-                       background='#34C759',
+                       background='#ff3d00',
                        borderwidth=0,
-                       lightcolor='#34C759',
-                       darkcolor='#34C759')
+                       lightcolor='#ff3d00',
+                       darkcolor='#ff3d00')
         
     def select_files(self):
         files = filedialog.askopenfilenames(
@@ -251,6 +408,18 @@ class MP4toMP3Converter:
                 "MP3 변환에 필요한 구성 요소를 찾을 수 없습니다.\n\n앱을 다시 다운로드하거나 개발자에게 문의하세요."
             )
             return
+
+        # STT 선택 시 모델 적합성 경고
+        self.selected_model = getattr(self, 'model_var', tk.StringVar(value='small')).get()
+        if getattr(self, 'enable_stt', tk.BooleanVar(value=False)).get():
+            sys_info = get_system_info()
+            if not self._is_model_feasible(self.selected_model, sys_info):
+                proceed = messagebox.askyesno(
+                    "사양 경고",
+                    f"선택한 모델({self.selected_model})은 현재 사양에서 메모리 부족이 예상됩니다.\n그래도 진행하시겠습니까?"
+                )
+                if not proceed:
+                    return
         
         # Hide drop zone and show progress
         self.drop_frame.pack_forget()
@@ -508,6 +677,22 @@ class MP4toMP3Converter:
                     self.root.after(0, self.update_progress_complete, i + 1, overall_percent)
                     self.root.update_idletasks()
                     time.sleep(0.05)
+
+                    # STT: Whisper 전사
+                    if getattr(self, 'enable_stt', tk.BooleanVar(value=False)).get():
+                        try:
+                            self.status_label.config(text=f"STT 전사 중: {input_path.name}")
+                            self.root.update_idletasks()
+                            model, device = load_whisper_model(self.selected_model or 'small')
+                            # Whisper는 보통 직접 오디오 입력을 받지만, 여기서는 변환된 mp3를 사용
+                            result = model.transcribe(str(output_path))
+                            text = result.get('text', '').strip()
+                            if text:
+                                with open(str(input_path.with_suffix('.txt')), 'w', encoding='utf-8') as f:
+                                    f.write(text)
+                        except Exception as stt_err:
+                            self.status_label.config(text=f"STT 실패: {stt_err}")
+                            self.root.update_idletasks()
                 else:
                     failed_files.append(input_path.name)
                     
@@ -624,10 +809,24 @@ class MP4toMP3Converter:
         total = len(self.files_to_convert)
         
         if success_count == total:
-            messagebox.showinfo(
-                "완료",
-                f"✅ {success_count}개 파일 변환 완료!\n\nMP3 파일이 원본 파일과 같은 위치에 저장되었습니다."
-            )
+            # 작은 팝업과 '폴더 열기' 버튼 제공
+            popup = tk.Toplevel(self.root)
+            popup.title('완료')
+            popup.configure(bg='#f2f1ef')
+            msg = tk.Label(popup, text=f"✅ {success_count}개 파일 변환 완료!\n\nMP3 파일이 원본 파일과 같은 위치에 저장되었습니다.", bg='#f2f1ef', fg='#131313')
+            msg.pack(padx=20, pady=12)
+            folder = None
+            if self.files_to_convert:
+                folder = str(Path(self.files_to_convert[-1]).parent)
+            self.last_output_dir = folder
+            def _open_and_close():
+                if folder and os.path.isdir(folder):
+                    try:
+                        os.startfile(folder)
+                    except Exception:
+                        subprocess.run(['explorer', folder])
+                popup.destroy()
+            tk.Button(popup, text='폴더 열기', bg='#ff3d00', fg='white', relief=tk.FLAT, command=_open_and_close).pack(pady=(0, 12))
         else:
             message = f"변환 완료: {success_count}/{total}\n"
             if failed_files:
@@ -637,6 +836,25 @@ class MP4toMP3Converter:
             messagebox.showwarning("부분 완료", message)
         
         self.clear_files()
+
+    def _is_model_feasible(self, model_name: str, sys_info: dict) -> bool:
+        ram = sys_info.get('ram_gb') or 0
+        vram = sys_info.get('vram_gb') or 0
+        has_cuda = bool(sys_info.get('has_cuda'))
+        reqs = {
+            'tiny': {'ram': 1, 'vram': 0, 'cuda': False},
+            'base': {'ram': 2, 'vram': 0, 'cuda': False},
+            'small': {'ram': 4, 'vram': 0, 'cuda': False},
+            'medium': {'ram': 8, 'vram': 6, 'cuda': True},
+            'large-v3': {'ram': 16, 'vram': 10, 'cuda': True},
+        }
+        r = reqs.get(model_name, reqs['small'])
+        if ram < r['ram']:
+            return False
+        if r['cuda']:
+            if not has_cuda or vram < r['vram']:
+                return False
+        return True
 
 def main():
     root = tk.Tk()

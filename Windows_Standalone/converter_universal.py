@@ -15,6 +15,10 @@ import webbrowser
 # Whisper Manager 통합
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from whisper_manager import WhisperManager
+try:
+    from custom_widgets import RoundedButton
+except ImportError:
+    RoundedButton = None
 from whisper_installer_ui import WhisperInstallerDialog
 
 class ModernMP4Converter:
@@ -255,21 +259,35 @@ class ModernMP4Converter:
         self.status_label.pack(side=tk.LEFT)
         
         # 설치 버튼 (필요시 표시)
-        self.install_button = tk.Button(
-            self.install_status_frame,
-            text="설치하기",
-            font=('SF Pro Display', 11, 'bold'),
-            bg=self.colors['accent'],
-            fg='white',
-            relief=tk.RAISED,
-            bd=2,
-            padx=20,
-            pady=5,
-            command=self.install_whisper,
-            cursor='hand2',
-            activebackground='#e63600',
-            activeforeground='white'
-        )
+        if RoundedButton:
+            self.install_button = RoundedButton(
+                self.install_status_frame,
+                text="설치하기",
+                width=100,
+                height=35,
+                corner_radius=8,
+                bg_color=self.colors['accent'],
+                fg_color='white',
+                hover_color=self.colors['accent_hover'],
+                font=('SF Pro Display', 11, 'bold'),
+                command=self.install_whisper
+            )
+        else:
+            self.install_button = tk.Button(
+                self.install_status_frame,
+                text="설치하기",
+                font=('SF Pro Display', 11, 'bold'),
+                bg=self.colors['accent'],
+                fg='white',
+                relief=tk.RAISED,
+                bd=2,
+                padx=20,
+                pady=5,
+                command=self.install_whisper,
+                cursor='hand2',
+                activebackground='#e63600',
+                activeforeground='white'
+            )
         # 초기에는 숨김
         
         # 진행률 바 (설치 중 표시)
@@ -596,7 +614,7 @@ class ModernMP4Converter:
         
         # UI update
         self.drop_frame.master.pack_forget()
-        self.model_frame.pack_forget()
+        self.stt_options_frame.pack_forget()
         self.progress_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
         
         self.convert_button.config(state=tk.DISABLED)

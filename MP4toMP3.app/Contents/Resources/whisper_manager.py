@@ -58,50 +58,54 @@ class WhisperManager:
             return False
     
     def install_whisper_minimal(self, progress_callback=None):
-        """최소 Whisper 설치 (torch 제외 옵션)"""
+        """Whisper + Torch(CPU) 사용자 영역에 설치. 권한 문제 최소화/안정성 향상."""
         try:
+            env = os.environ.copy()
+            env.setdefault('PIP_DISABLE_PIP_VERSION_CHECK', '1')
+            # 1) Whisper 설치 (의존성 포함, --user)
             if progress_callback:
-                progress_callback(10, "Whisper 코어 설치 중...")
-            
-            # CPU 전용 가벼운 설치
-            cmd = [
-                sys.executable, "-m", "pip", "install",
-                "--no-deps",  # 의존성 최소화
-                "openai-whisper"
+                progress_callback(5, "Whisper 설치 준비...")
+            cmd_whisper = [
+                sys.executable, '-m', 'pip', 'install', '-U', '--user', 'openai-whisper'
             ]
-            subprocess.check_call(cmd, timeout=300)
-            
+            result = subprocess.run(cmd_whisper, capture_output=True, text=True, timeout=900, env=env)
+            if result.returncode != 0:
+                # Fallback: GitHub 소스에서 설치
+                if progress_callback:
+                    progress_callback(10, "Whisper 소스 설치 시도...")
+                fallback = [sys.executable, '-m', 'pip', 'install', '--user', 'git+https://github.com/openai/whisper.git']
+                result_fb = subprocess.run(fallback, capture_output=True, text=True, timeout=900, env=env)
+                if result_fb.returncode != 0:
+                    err = result_fb.stderr or result_fb.stdout or result.stderr
+                    if progress_callback:
+                        progress_callback(0, f"Whisper 설치 실패: {err[:200]}")
+                    return False
             if progress_callback:
-                progress_callback(50, "필수 패키지 설치 중...")
-            
-            # 필수 의존성만 설치
-            essential = ["numpy", "tqdm", "more-itertools", "tiktoken"]
-            for pkg in essential:
-                subprocess.check_call(
-                    [sys.executable, "-m", "pip", "install", pkg],
-                    timeout=60
-                )
-            
+                progress_callback(40, "PyTorch(CPU) 설치 중...")
+            # 2) Torch CPU 설치 (torchaudio는 플랫폼에 따라 선택)
+            cmd_torch = [
+                sys.executable, '-m', 'pip', 'install', '--user', 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu'
+            ]
+            result_t = subprocess.run(cmd_torch, capture_output=True, text=True, timeout=900, env=env)
+            if result_t.returncode != 0:
+                err = result_t.stderr or result_t.stdout
+                if progress_callback:
+                    progress_callback(0, f"Torch 설치 실패: {err[:200]}")
+                return False
+            # torchaudio는 선택 설치 (실패해도 계속)
             if progress_callback:
-                progress_callback(90, "PyTorch CPU 버전 설치 중...")
-            
-            # CPU 전용 PyTorch (더 작은 크기)
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install",
-                "torch", "torchaudio",
-                "--index-url", "https://download.pytorch.org/whl/cpu"
-            ], timeout=300)
-            
+                progress_callback(70, "선택 패키지 설치...")
+            subprocess.run([sys.executable, '-m', 'pip', 'install', '--user', 'torchaudio', '--index-url', 'https://download.pytorch.org/whl/cpu'], capture_output=True, text=True, timeout=600, env=env)
+            if progress_callback:
+                progress_callback(90, "마무리 중...")
             self.config['whisper_installed'] = True
             self.save_config()
-            
             if progress_callback:
                 progress_callback(100, "설치 완료!")
-            
             return True
-            
         except Exception as e:
-            print(f"설치 실패: {e}")
+            if progress_callback:
+                progress_callback(0, f"설치 실패: {e}")
             return False
     
     def download_model(self, model_name='tiny', progress_callback=None):
@@ -123,7 +127,12 @@ class WhisperManager:
                 progress_callback(0, f"{model_name.upper()} 모델 다운로드 중... ({model_info['size']}MB)")
             
             # Whisper 모델 URL
-            url = f"https://openaipublic.azureedge.net/main/whisper/models/{self._get_model_hash(model_name)}/{model_name}.pt"
+            model_hash = self._get_model_hash(model_name)
+            if not model_hash:
+                if progress_callback:
+                    progress_callback(0, f"모델 {model_name}을 찾을 수 없습니다")
+                return False
+            url = f"https://openaipublic.azureedge.net/main/whisper/models/{model_hash}/{model_name}.pt"
             
             # 다운로드 with progress
             def download_hook(block_num, block_size, total_size):
@@ -163,7 +172,7 @@ class WhisperManager:
             'base': 'ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e',
             'small': '9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794',
             'medium': '345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1',
-            'large': 'e4b87e7e4c0e6d9ed3a3ca22d85b1a3e08d13f1c8f8c4f3b3f8e5f6f7f8f9f0f1'
+            'large': 'e5b1a55542b56bf9f0060627744b95e15d47bdc604f2dc34a4afcae68649bb48'
         }
         return hashes.get(model_name, '')
     

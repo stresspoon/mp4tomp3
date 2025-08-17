@@ -69,7 +69,13 @@ class WhisperManager:
                 "--no-deps",  # 의존성 최소화
                 "openai-whisper"
             ]
-            subprocess.check_call(cmd, timeout=300)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                error_msg = result.stderr if result.stderr else result.stdout
+                print(f"Whisper 설치 실패: {error_msg}")
+                if progress_callback:
+                    progress_callback(0, f"Whisper 설치 실패: {error_msg[:100]}")
+                return False
             
             if progress_callback:
                 progress_callback(50, "필수 패키지 설치 중...")
@@ -77,20 +83,33 @@ class WhisperManager:
             # 필수 의존성만 설치
             essential = ["numpy", "tqdm", "more-itertools", "tiktoken"]
             for pkg in essential:
-                subprocess.check_call(
+                result = subprocess.run(
                     [sys.executable, "-m", "pip", "install", pkg],
-                    timeout=60
+                    capture_output=True, text=True, timeout=60
                 )
+                if result.returncode != 0:
+                    error_msg = result.stderr if result.stderr else result.stdout
+                    print(f"{pkg} 설치 실패: {error_msg}")
+                    if progress_callback:
+                        progress_callback(0, f"{pkg} 설치 실패")
+                    return False
             
             if progress_callback:
                 progress_callback(90, "PyTorch CPU 버전 설치 중...")
             
             # CPU 전용 PyTorch (더 작은 크기)
-            subprocess.check_call([
+            result = subprocess.run([
                 sys.executable, "-m", "pip", "install",
                 "torch", "torchaudio",
                 "--index-url", "https://download.pytorch.org/whl/cpu"
-            ], timeout=300)
+            ], capture_output=True, text=True, timeout=300)
+            
+            if result.returncode != 0:
+                error_msg = result.stderr if result.stderr else result.stdout
+                print(f"PyTorch 설치 실패: {error_msg}")
+                if progress_callback:
+                    progress_callback(0, f"PyTorch 설치 실패: {error_msg[:100]}")
+                return False
             
             self.config['whisper_installed'] = True
             self.save_config()
@@ -114,21 +133,30 @@ class WhisperManager:
         
         # 이미 다운로드됨
         if model_file.exists():
+            if progress_callback:
+                progress_callback(100, f"{model_name.upper()} 모델이 이미 설치되어 있습니다")
             return True
         
         try:
             if progress_callback:
-                progress_callback(0, f"{model_name} 모델 다운로드 중... ({model_info['size']}MB)")
+                progress_callback(0, f"{model_name.upper()} 모델 다운로드 중... ({model_info['size']}MB)")
             
             # Whisper 모델 URL
-            url = f"https://openaipublic.azureedge.net/main/whisper/models/{model_name}.pt"
+            model_hash = self._get_model_hash(model_name)
+            if not model_hash:
+                if progress_callback:
+                    progress_callback(0, f"모델 {model_name}을 찾을 수 없습니다")
+                return False
+            url = f"https://openaipublic.azureedge.net/main/whisper/models/{model_hash}/{model_name}.pt"
             
             # 다운로드 with progress
             def download_hook(block_num, block_size, total_size):
                 downloaded = block_num * block_size
-                percent = min(int(downloaded * 100 / total_size), 100)
+                percent = min(int(downloaded * 100 / total_size), 100) if total_size > 0 else 0
                 if progress_callback:
-                    progress_callback(percent, f"다운로드 중... {percent}%")
+                    mb_downloaded = downloaded / (1024 * 1024)
+                    mb_total = total_size / (1024 * 1024)
+                    progress_callback(percent, f"다운로드 중... {mb_downloaded:.1f}/{mb_total:.1f} MB ({percent}%)")
             
             urllib.request.urlretrieve(url, model_file, reporthook=download_hook)
             
@@ -151,6 +179,17 @@ class WhisperManager:
             if model_file.exists():
                 model_file.unlink()
             return False
+    
+    def _get_model_hash(self, model_name):
+        """모델별 해시 값 반환"""
+        hashes = {
+            'tiny': '65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9',
+            'base': 'ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e',
+            'small': '9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794',
+            'medium': '345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1',
+            'large': 'e5b1a55542b56bf9f0060627744b95e15d47bdc604f2dc34a4afcae68649bb48'
+        }
+        return hashes.get(model_name, '')
     
     def get_available_models(self):
         """설치된 모델 목록"""

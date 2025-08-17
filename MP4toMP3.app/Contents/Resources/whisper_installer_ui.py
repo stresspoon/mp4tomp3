@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 from whisper_manager import WhisperManager
+from custom_widgets import RoundedButton
 
 class WhisperInstallerDialog:
     """Whisper 설치 다이얼로그"""
@@ -184,66 +185,50 @@ class WhisperInstallerDialog:
         button_container = tk.Frame(button_frame, bg=self.colors['bg'])
         button_container.pack()
         
-        # 설치 시작 버튼 - 크고 명확하게
-        self.install_button = tk.Button(
+        # 설치 시작 버튼 - RoundedButton
+        self.install_button = RoundedButton(
             button_container,
+            width=180,
+            height=48,
+            corner_radius=14,
             text="설치 시작",
-            font=('SF Pro Display', 16, 'bold'),
-            bg='#ff3d00',
-            fg='white',
-            relief=tk.RAISED,
-            bd=3,
-            padx=50,
-            pady=12,
-            command=self.start_installation,
-            cursor='hand2',
-            activebackground='#e63600',
-            activeforeground='white',
-            highlightthickness=2,
-            highlightbackground='#ff3d00',
-            highlightcolor='#ff3d00'
+            bg_color=self.colors['accent'],
+            fg_color='white',
+            hover_color='#e63600',
+            font=('SF Pro Display', 14, 'bold'),
+            command=self.start_installation
         )
         self.install_button.grid(row=0, column=0, padx=10)
         
-        # 나중에 버튼
-        cancel_btn = tk.Button(
+        # 나중에 버튼 - RoundedButton
+        cancel_btn = RoundedButton(
             button_container,
+            width=140,
+            height=48,
+            corner_radius=14,
             text="나중에",
+            bg_color='#666666',
+            fg_color='white',
+            hover_color='#555555',
             font=('SF Pro Display', 14),
-            bg='#666666',
-            fg='white',
-            relief=tk.RAISED,
-            bd=2,
-            padx=30,
-            pady=12,
-            command=self.dialog.destroy,
-            cursor='hand2',
-            activebackground='#555555',
-            activeforeground='white'
+            command=self.dialog.destroy
         )
         cancel_btn.grid(row=0, column=1, padx=10)
         
-        # STT 없이 사용 버튼
-        skip_btn = tk.Button(
+        # STT 없이 사용 버튼 - RoundedButton
+        skip_btn = RoundedButton(
             button_frame,
+            width=160,
+            height=40,
+            corner_radius=10,
             text="STT 없이 사용",
+            bg_color=self.colors['bg'],
+            fg_color=self.colors['text_secondary'],
+            hover_color='#e9e7e5',
             font=('SF Pro Display', 11),
-            bg=self.colors['bg'],
-            fg=self.colors['text_secondary'],
-            relief=tk.FLAT,
-            command=self.skip_stt,
-            cursor='hand2',
-            bd=0
+            command=self.skip_stt
         )
         skip_btn.pack(pady=(10, 0))
-        
-        # 호버 효과
-        self.install_button.bind('<Enter>', lambda e: self.install_button.config(bg='#e63600'))
-        self.install_button.bind('<Leave>', lambda e: self.install_button.config(bg='#ff3d00'))
-        cancel_btn.bind('<Enter>', lambda e: cancel_btn.config(bg='#555555'))
-        cancel_btn.bind('<Leave>', lambda e: cancel_btn.config(bg='#666666'))
-        skip_btn.bind('<Enter>', lambda e: skip_btn.config(fg=self.colors['accent']))
-        skip_btn.bind('<Leave>', lambda e: skip_btn.config(fg=self.colors['text_secondary']))
     
     def create_model_card(self, parent, model, index):
         """모델 선택 카드 생성"""

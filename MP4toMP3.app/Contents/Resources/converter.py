@@ -416,7 +416,13 @@ class ModernMP4Converter:
     def _install_failed_ui(self, error):
         self.install_progress.pack_forget()
         self.install_button.config(state=tk.NORMAL)
-        messagebox.showerror("설치 실패", f"설치 중 오류가 발생했습니다:\n{error}")
+        # WhisperManager에서 상세 오류 추출
+        detail = self.whisper_manager.get_last_error()
+        if detail:
+            message = f"설치 중 오류가 발생했습니다:\n{error}\n\n상세:\n{detail[:500]}"
+        else:
+            message = f"설치 중 오류가 발생했습니다:\n{error}"
+        messagebox.showerror("설치 실패", message)
     
     
     def create_progress_section(self, parent):

@@ -30,6 +30,7 @@ class WhisperManager:
         self.models_dir.mkdir(parents=True, exist_ok=True)
         
         self.config_file = self.app_dir / 'config.json'
+        self.last_error = ""
         self.load_config()
     
     def load_config(self):
@@ -76,7 +77,8 @@ class WhisperManager:
                 fallback = [sys.executable, '-m', 'pip', 'install', '--user', 'git+https://github.com/openai/whisper.git']
                 result_fb = subprocess.run(fallback, capture_output=True, text=True, timeout=900, env=env)
                 if result_fb.returncode != 0:
-                    err = result_fb.stderr or result_fb.stdout or result.stderr
+                    err = (result_fb.stderr or result_fb.stdout or result.stderr or '')
+                    self.last_error = err
                     if progress_callback:
                         progress_callback(0, f"Whisper 설치 실패: {err[:200]}")
                     return False
@@ -88,22 +90,28 @@ class WhisperManager:
             ]
             result_t = subprocess.run(cmd_torch, capture_output=True, text=True, timeout=900, env=env)
             if result_t.returncode != 0:
-                err = result_t.stderr or result_t.stdout
+                err = (result_t.stderr or result_t.stdout or '')
+                self.last_error = err
                 if progress_callback:
                     progress_callback(0, f"Torch 설치 실패: {err[:200]}")
                 return False
             # torchaudio는 선택 설치 (실패해도 계속)
             if progress_callback:
                 progress_callback(70, "선택 패키지 설치...")
-            subprocess.run([sys.executable, '-m', 'pip', 'install', '--user', 'torchaudio', '--index-url', 'https://download.pytorch.org/whl/cpu'], capture_output=True, text=True, timeout=600, env=env)
+            ta = subprocess.run([sys.executable, '-m', 'pip', 'install', '--user', 'torchaudio', '--index-url', 'https://download.pytorch.org/whl/cpu'], capture_output=True, text=True, timeout=600, env=env)
+            if ta.returncode != 0:
+                # 비치명적 오류 기록만
+                self.last_error = (ta.stderr or ta.stdout or '')
             if progress_callback:
                 progress_callback(90, "마무리 중...")
             self.config['whisper_installed'] = True
             self.save_config()
+            self.last_error = ""
             if progress_callback:
                 progress_callback(100, "설치 완료!")
             return True
         except Exception as e:
+            self.last_error = str(e)
             if progress_callback:
                 progress_callback(0, f"설치 실패: {e}")
             return False
@@ -156,11 +164,13 @@ class WhisperManager:
             
             if progress_callback:
                 progress_callback(100, "다운로드 완료!")
+            self.last_error = ""
             
             return True
             
         except Exception as e:
             print(f"모델 다운로드 실패: {e}")
+            self.last_error = str(e)
             if model_file.exists():
                 model_file.unlink()
             return False
@@ -191,6 +201,9 @@ class WhisperManager:
         else:
             # 자동 다운로드 (Whisper 기본)
             return whisper.load_model(model_name)
+
+    def get_last_error(self) -> str:
+        return self.last_error or ""
     
     def estimate_space_needed(self, model_name='tiny'):
         """필요한 디스크 공간 계산"""

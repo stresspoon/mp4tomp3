@@ -12,9 +12,12 @@ class RoundedButton(tk.Canvas):
     def __init__(self, parent, width=120, height=40, corner_radius=10, 
                  text="", bg_color="#ff3d00", fg_color="white", 
                  hover_color="#e63600", font=('SF Pro Display', 12, 'bold'),
-                 command=None, state='normal'):
+                 command=None, state='normal', shadow=True, shadow_offset=3, shadow_color="#d9d9d9"):
         super().__init__(parent, width=width, height=height, 
                         highlightthickness=0, bd=0)
+        self.shadow = shadow
+        self.shadow_offset = shadow_offset
+        self.shadow_color = shadow_color
         
         self.width = width
         self.height = height
@@ -63,11 +66,20 @@ class RoundedButton(tk.Canvas):
             bg = self.bg_color
             fg = self.fg_color
         
-        # Draw rounded rectangle
+        # Optional shadow
+        if self.shadow:
+            self.draw_rounded_rect(
+                2 + self.shadow_offset, 2 + self.shadow_offset,
+                self.width-2 + self.shadow_offset, self.height-2 + self.shadow_offset,
+                self.corner_radius,
+                fill=self.shadow_color,
+                outline=""
+            )
+        # Draw rounded rectangle (button body)
         self.rect = self.draw_rounded_rect(
-            2, 2, self.width-2, self.height-2, 
-            self.corner_radius, 
-            fill=bg, 
+            2, 2, self.width-2, self.height-2,
+            self.corner_radius,
+            fill=bg,
             outline=""
         )
         

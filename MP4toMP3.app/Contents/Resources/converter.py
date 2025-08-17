@@ -16,6 +16,7 @@ import webbrowser
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from whisper_manager import WhisperManager
 from whisper_installer_ui import WhisperInstallerDialog
+from custom_widgets import RoundedButton
 
 class ModernMP4Converter:
     def __init__(self, root):
@@ -379,43 +380,37 @@ class ModernMP4Converter:
         button_frame = tk.Frame(parent, bg=self.colors['bg'])
         button_frame.pack(fill=tk.X, pady=(20, 0))
         
-        # Convert button with hover effect
-        self.convert_button = tk.Button(
+        # Convert button (rounded with shadow)
+        self.convert_button = RoundedButton(
             button_frame,
+            width=180,
+            height=48,
+            corner_radius=14,
             text="변환 시작",
+            bg_color=self.colors['accent'],
+            fg_color='white',
+            hover_color=self.colors['accent_hover'],
             font=('SF Pro Display', 14, 'bold'),
-            bg=self.colors['accent'],
-            fg='white',
-            relief=tk.FLAT,
-            cursor='hand2',
-            padx=40,
-            pady=12,
             command=self.start_conversion,
-            state=tk.DISABLED,
-            activebackground=self.colors['accent_hover'],
-            activeforeground='white'
+            state='disabled'
         )
         self.convert_button.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Bind hover events
-        self.convert_button.bind('<Enter>', lambda e: self.convert_button.config(bg=self.colors['accent_hover']) if self.convert_button['state'] == tk.NORMAL else None)
-        self.convert_button.bind('<Leave>', lambda e: self.convert_button.config(bg=self.colors['accent']) if self.convert_button['state'] == tk.NORMAL else None)
+        # RoundedButton handles hover itself
         
-        # Clear button with hover effect
-        self.clear_button = tk.Button(
+        # Clear button (rounded)
+        self.clear_button = RoundedButton(
             button_frame,
+            width=140,
+            height=48,
+            corner_radius=14,
             text="초기화",
+            bg_color=self.colors['text_secondary'],
+            fg_color='white',
+            hover_color='#555555',
             font=('SF Pro Display', 14),
-            bg=self.colors['text_secondary'],
-            fg='white',
-            relief=tk.FLAT,
-            cursor='hand2',
-            padx=30,
-            pady=12,
             command=self.clear_files,
-            state=tk.DISABLED,
-            activebackground='#555555',
-            activeforeground='white'
+            state='disabled'
         )
         self.clear_button.pack(side=tk.LEFT)
         
@@ -440,8 +435,8 @@ class ModernMP4Converter:
                 text=f"{count}개 파일 선택됨",
                 fg=self.colors['success']
             )
-            self.convert_button.config(state=tk.NORMAL, cursor='hand2')
-            self.clear_button.config(state=tk.NORMAL, cursor='hand2')
+            self.convert_button.config(state='normal')
+            self.clear_button.config(state='normal')
     
     def clear_files(self):
         self.files_to_convert = []
@@ -449,8 +444,8 @@ class ModernMP4Converter:
             text="드래그 앤 드롭 또는 클릭하여 파일 선택",
             fg=self.colors['text']
         )
-        self.convert_button.config(state=tk.DISABLED)
-        self.clear_button.config(state=tk.DISABLED)
+        self.convert_button.config(state='disabled')
+        self.clear_button.config(state='disabled')
         self.progress_frame.pack_forget()
         self.drop_frame.master.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
     

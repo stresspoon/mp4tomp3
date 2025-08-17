@@ -91,7 +91,7 @@ class ModernMP4Converter:
         
         tk.Label(
             title_container,
-            text="🎵",
+            text="MP3",
             font=('SF Pro Display', 32),
             bg=self.colors['bg'],
             fg=self.colors['accent']
@@ -136,7 +136,7 @@ class ModernMP4Converter:
         
         tk.Label(
             drop_content,
-            text="📁",
+            text="+",
             font=('SF Pro Display', 48),
             bg=self.colors['card'],
             fg=self.colors['accent']
@@ -191,7 +191,7 @@ class ModernMP4Converter:
         # Custom checkbox
         self.stt_check = tk.Checkbutton(
             stt_inner,
-            text="🎤 음성을 텍스트로 변환 (STT)",
+            text="음성을 텍스트로 변환 (STT)",
             variable=self.enable_stt,
             font=('SF Pro Display', 12, 'bold'),
             bg=self.colors['card'],
@@ -206,7 +206,7 @@ class ModernMP4Converter:
         # STT 설정 버튼
         self.stt_config_button = tk.Button(
             stt_inner,
-            text="⚙️ 설정",
+            text="설정",
             font=('SF Pro Display', 11),
             bg=self.colors['accent'],
             fg='white',
@@ -437,7 +437,7 @@ class ModernMP4Converter:
         
         if count > 0:
             self.drop_label.config(
-                text=f"✅ {count}개 파일 선택됨",
+                text=f"{count}개 파일 선택됨",
                 fg=self.colors['success']
             )
             self.convert_button.config(state=tk.NORMAL, cursor='hand2')
@@ -558,7 +558,7 @@ class ModernMP4Converter:
                 # STT if enabled
                 if self.enable_stt.get() and self.whisper_model:
                     self.root.after(0, lambda name=input_path.name: self.status_label.config(
-                        text=f"🎤 음성 인식 중: {name}"
+                        text=f"음성 인식 중: {name}"
                     ))
                     
                     try:
@@ -575,7 +575,7 @@ class ModernMP4Converter:
                                 f.write(text)
                             
                             self.root.after(0, lambda name=txt_path.name: self.status_label.config(
-                                text=f"✅ 텍스트 파일 생성: {name}"
+                                text=f"텍스트 파일 생성: {name}"
                             ))
                     except Exception as e:
                         print(f"STT error: {e}")

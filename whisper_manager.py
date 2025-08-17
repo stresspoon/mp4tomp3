@@ -114,21 +114,25 @@ class WhisperManager:
         
         # 이미 다운로드됨
         if model_file.exists():
+            if progress_callback:
+                progress_callback(100, f"{model_name.upper()} 모델이 이미 설치되어 있습니다")
             return True
         
         try:
             if progress_callback:
-                progress_callback(0, f"{model_name} 모델 다운로드 중... ({model_info['size']}MB)")
+                progress_callback(0, f"{model_name.upper()} 모델 다운로드 중... ({model_info['size']}MB)")
             
             # Whisper 모델 URL
-            url = f"https://openaipublic.azureedge.net/main/whisper/models/{model_name}.pt"
+            url = f"https://openaipublic.azureedge.net/main/whisper/models/{self._get_model_hash(model_name)}/{model_name}.pt"
             
             # 다운로드 with progress
             def download_hook(block_num, block_size, total_size):
                 downloaded = block_num * block_size
-                percent = min(int(downloaded * 100 / total_size), 100)
+                percent = min(int(downloaded * 100 / total_size), 100) if total_size > 0 else 0
                 if progress_callback:
-                    progress_callback(percent, f"다운로드 중... {percent}%")
+                    mb_downloaded = downloaded / (1024 * 1024)
+                    mb_total = total_size / (1024 * 1024)
+                    progress_callback(percent, f"다운로드 중... {mb_downloaded:.1f}/{mb_total:.1f} MB ({percent}%)")
             
             urllib.request.urlretrieve(url, model_file, reporthook=download_hook)
             
@@ -151,6 +155,17 @@ class WhisperManager:
             if model_file.exists():
                 model_file.unlink()
             return False
+    
+    def _get_model_hash(self, model_name):
+        """모델별 해시 값 반환"""
+        hashes = {
+            'tiny': '65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9',
+            'base': 'ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e',
+            'small': '9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794',
+            'medium': '345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1',
+            'large': 'e4b87e7e4c0e6d9ed3a3ca22d85b1a3e08d13f1c8f8c4f3b3f8e5f6f7f8f9f0f1'
+        }
+        return hashes.get(model_name, '')
     
     def get_available_models(self):
         """설치된 모델 목록"""

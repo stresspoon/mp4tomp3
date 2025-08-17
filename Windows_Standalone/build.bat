@@ -21,8 +21,8 @@ if errorlevel 1 (
 )
 
 REM Install PyInstaller
-echo Installing PyInstaller...
-pip install pyinstaller pillow
+echo Installing dependencies (PyInstaller + Whisper + Torch CPU)...
+pip install pyinstaller pillow openai-whisper torch --extra-index-url https://download.pytorch.org/whl/cpu
 
 REM Check ffmpeg.exe
 if not exist ffmpeg.exe (

@@ -149,6 +149,11 @@ class MP4toMP3Converter:
         self.is_converting = False
         
         self.setup_ui()
+        # Prefetch whisper model in background so first run downloads automatically
+        try:
+            self.root.after(100, self._start_model_prefetch)
+        except Exception:
+            pass
         
     def setup_ui(self):
         # Title / Theme / Font setup
@@ -213,6 +218,8 @@ class MP4toMP3Converter:
         sys_info = get_system_info()
         self.model_recommended = recommend_model(sys_info)
         self.model_var.set(self.model_recommended)
+        # Update prefetch target when selection changes
+        self.model_combo.bind('<<ComboboxSelected>>', lambda e: self._start_model_prefetch())
         self.enable_stt = tk.BooleanVar(value=False)
         tk.Label(options_frame, text=f"추천: {self.model_recommended} (RAM: {sys_info.get('ram_gb','?')}GB, VRAM: {sys_info.get('vram_gb','?')}GB)", font=(font_family, 10), bg='#f2f1ef', fg='#131313').pack(side=tk.LEFT)
         self.stt_check = tk.Checkbutton(options_frame, text='STT (텍스트 생성)', variable=self.enable_stt, bg='#f2f1ef', fg='#131313', selectcolor='#f2f1ef', activebackground='#f2f1ef')
@@ -855,6 +862,20 @@ class MP4toMP3Converter:
             if not has_cuda or vram < r['vram']:
                 return False
         return True
+
+    def _start_model_prefetch(self):
+        """Background prefetch for selected/recommended model to trigger initial download."""
+        try:
+            target = self.model_var.get() or self.model_recommended or 'small'
+        except Exception:
+            target = 'small'
+        def _worker():
+            try:
+                load_whisper_model(target)
+            except Exception:
+                pass
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
 
 def main():
     root = tk.Tk()

@@ -22,12 +22,13 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pillow
+          pip install pyinstaller pillow openai-whisper torch --extra-index-url https://download.pytorch.org/whl/cpu
           cd Windows_Standalone
           pyinstaller --onefile `
             --windowed `
             --name "MP4toMP3" `
             --add-binary "ffmpeg.exe;." `
+            --add-data "Pretendard.ttf;." `
             --hidden-import "tkinter" `
             --hidden-import "tkinter.ttk" `
             --hidden-import "tkinter.filedialog" `

@@ -446,6 +446,12 @@ class MP4toMP3Converter:
         
         # Start time update
         self.update_time()
+
+        # Prefetch whisper model in background to trigger first-time download
+        try:
+            self.root.after(100, self._start_model_prefetch)
+        except Exception:
+            pass
     
     def check_ffmpeg(self):
         # Check for embedded ffmpeg first
@@ -807,6 +813,20 @@ class MP4toMP3Converter:
             messagebox.showwarning("부분 완료", message)
         
         self.clear_files()
+
+    def _start_model_prefetch(self):
+        """Background prefetch to download whisper model on first run."""
+        try:
+            target = self.model_var.get() or getattr(self, 'model_recommended', 'small')
+        except Exception:
+            target = 'small'
+        def _worker():
+            try:
+                load_whisper_model(target)
+            except Exception:
+                pass
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
 
 def main():
     root = tk.Tk()

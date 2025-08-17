@@ -443,8 +443,9 @@ class MP4toMP3Converter:
                             ) + float('0.' + (m.group(4) or '0'))
                             if hasattr(self, 'file_durations') and i < len(self.file_durations):
                                 self.file_durations[i] = duration_seconds
-                            if getattr(self, 'total_duration_seconds', None) is not None:
-                                self.total_duration_seconds += duration_seconds
+                            if getattr(self, 'total_duration_seconds', None) is None:
+                                self.total_duration_seconds = 0
+                            self.total_duration_seconds += duration_seconds
 
                     # Parse current processed time
                     tm = time_pattern.search(line)
@@ -467,7 +468,7 @@ class MP4toMP3Converter:
                             self.eta_seconds = remaining_seconds
                         else:
                             # Fallback by files count if total duration unknown
-                            overall_percent = int((i / total_files) * 100) if total_files > 0 else 0
+                            overall_percent = int((((i + (current_percent / 100.0)) / total_files) * 100)) if total_files > 0 else int(current_percent)
                             if duration_seconds:
                                 self.eta_seconds = max(0, duration_seconds - processed_seconds)
                             else:

@@ -15,7 +15,11 @@
       "Bash(rm:*)",
       "Bash(MP4toMP3.app/Contents/MacOS/ffmpeg -version)",
       "Bash(killall:*)",
-      "Bash(zip:*)"
+      "Bash(zip:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

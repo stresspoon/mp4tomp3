@@ -13,28 +13,147 @@ import urllib.request
 import webbrowser
 
 # Whisper 자동 설치 함수
-def ensure_whisper_installed():
+def ensure_whisper_installed(show_terminal=False):
     """Whisper가 설치되어 있지 않으면 자동으로 설치"""
     try:
         import whisper
         return True
     except ImportError:
-        print("Whisper not found. Installing automatically...")
-        try:
-            # pip로 자동 설치
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "pip"])
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "openai-whisper"])
-            
-            # 다시 import 시도
-            import whisper
-            print("✅ Whisper installed successfully!")
-            return True
-        except Exception as e:
-            print(f"Failed to install Whisper: {e}")
-            return False
+        if show_terminal:
+            return install_whisper_with_terminal()
+        else:
+            return install_whisper_silent()
 
-# 앱 시작 시 Whisper 확인/설치
-_WHISPER_AVAILABLE = ensure_whisper_installed()
+def install_whisper_silent():
+    """Silent installation with timeout"""
+    try:
+        print("Installing Whisper in background...")
+        # Simple installation without pip upgrade to avoid hanging
+        process = subprocess.Popen(
+            [sys.executable, "-m", "pip", "install", "openai-whisper"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
+        
+        # Wait with timeout (5 minutes)
+        try:
+            process.wait(timeout=300)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            print("Installation timeout - switching to terminal mode")
+            return install_whisper_with_terminal()
+        
+        # Check if successful
+        try:
+            import whisper
+            return True
+        except ImportError:
+            return False
+    except Exception as e:
+        print(f"Silent installation failed: {e}")
+        return False
+
+def install_whisper_with_terminal():
+    """Installation with visible terminal"""
+    try:
+        print("Opening terminal for Whisper installation...")
+        
+        # Create installation script
+        install_script = '''
+import subprocess
+import sys
+import time
+
+print("="*60)
+print("🔄 Whisper STT 자동 설치")
+print("="*60)
+print()
+print("설치가 진행되는 동안 잠시 기다려주세요...")
+print("문제가 발생하면 Ctrl+C로 중단할 수 있습니다.")
+print()
+
+try:
+    # Install without pip upgrade to avoid hanging
+    print("📦 Whisper 패키지 설치 중...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "openai-whisper"], 
+                         timeout=300)
+    
+    # Verify installation
+    import whisper
+    print()
+    print("="*60)
+    print("✅ Whisper 설치 완료!")
+    print("창이 5초 후 자동으로 닫힙니다...")
+    print("="*60)
+    time.sleep(5)
+    sys.exit(0)
+    
+except subprocess.TimeoutExpired:
+    print("\n❌ 설치 시간 초과 (5분)")
+    print("인터넷 연결을 확인하고 다시 시도해주세요.")
+    input("\nEnter 키를 눌러 종료...")
+    sys.exit(1)
+except Exception as e:
+    print(f"\n❌ 설치 실패: {e}")
+    print("수동 설치 방법:")
+    print("1. 터미널/명령 프롬프트 열기")
+    print("2. 다음 명령어 실행: pip install openai-whisper")
+    input("\nEnter 키를 눌러 종료...")
+    sys.exit(1)
+'''
+        
+        # Save script temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(install_script)
+            script_path = f.name
+        
+        # Run script in new terminal window
+        if platform.system() == 'Darwin':  # macOS
+            subprocess.run([
+                'osascript', '-e',
+                f'tell app "Terminal" to do script "python3 {script_path}"'
+            ])
+        elif platform.system() == 'Windows':
+            subprocess.Popen([
+                'start', 'cmd', '/k',
+                f'python "{script_path}" & exit'
+            ], shell=True)
+        else:  # Linux
+            subprocess.Popen([
+                'x-terminal-emulator', '-e',
+                f'python3 {script_path}'
+            ])
+        
+        # Wait and check if installation succeeded
+        for _ in range(60):  # Check for 1 minute
+            time.sleep(1)
+            try:
+                import whisper
+                # Clean up temp file
+                try:
+                    os.unlink(script_path)
+                except:
+                    pass
+                return True
+            except ImportError:
+                continue
+        
+        return False
+        
+    except Exception as e:
+        print(f"Terminal installation failed: {e}")
+        return False
+
+# 앱 시작 시 Whisper 확인 (설치는 나중에)
+_WHISPER_AVAILABLE = False
+try:
+    import whisper
+    _WHISPER_AVAILABLE = True
+except ImportError:
+    _WHISPER_AVAILABLE = False
+
 _WHISPER_MODEL_CACHE = {}
 
 def load_whisper_model(model_name: str):
@@ -66,17 +185,17 @@ class ModernMP4Converter:
         self.root.title("MP4 to MP3 Converter")
         self.root.geometry("800x650")
         
-        # Modern color scheme
+        # Modern color scheme from complete-guide.md
         self.colors = {
-            'bg': '#0f0f0f',           # Dark background
-            'card': '#1a1a1a',         # Card background
-            'accent': '#3b82f6',       # Blue accent
-            'accent_hover': '#2563eb', # Darker blue
-            'text': '#ffffff',         # White text
-            'text_secondary': '#9ca3af', # Gray text
+            'bg': '#f2f1ef',           # Light background
+            'card': '#ffffff',         # White card background
+            'accent': '#ff3d00',       # Orange accent
+            'accent_hover': '#e63600', # Darker orange on hover
+            'text': '#131313',         # Dark text
+            'text_secondary': '#666666', # Gray text
             'success': '#10b981',      # Green
             'error': '#ef4444',        # Red
-            'border': '#2d2d2d'        # Border color
+            'border': '#e0e0e0'        # Light border
         }
         
         self.root.configure(bg=self.colors['bg'])
@@ -102,38 +221,51 @@ class ModernMP4Converter:
         try:
             global _WHISPER_AVAILABLE
             if not _WHISPER_AVAILABLE:
-                self.root.after(0, lambda: self.show_installation_dialog())
-                _WHISPER_AVAILABLE = ensure_whisper_installed()
-                if _WHISPER_AVAILABLE:
+                # Show simple notification
+                self.root.after(0, lambda: self.show_installation_notice())
+                
+                # Try silent installation first
+                _WHISPER_AVAILABLE = install_whisper_silent()
+                
+                if not _WHISPER_AVAILABLE:
+                    # If silent fails, ask user for terminal installation
+                    self.root.after(0, lambda: self.ask_terminal_installation())
+                else:
                     self.root.after(0, lambda: self.installation_complete())
         except Exception as e:
             print(f"Whisper check error: {e}")
     
-    def show_installation_dialog(self):
-        """Show installation progress dialog"""
+    def show_installation_notice(self):
+        """Show simple installation notice"""
         self.install_dialog = tk.Toplevel(self.root)
-        self.install_dialog.title("설치 중")
+        self.install_dialog.title("Whisper STT 설치")
         self.install_dialog.geometry("400x150")
         self.install_dialog.configure(bg=self.colors['card'])
         self.install_dialog.transient(self.root)
-        self.install_dialog.grab_set()
+        
+        # Center the dialog
+        self.install_dialog.update_idletasks()
+        x = (self.install_dialog.winfo_screenwidth() // 2) - (400 // 2)
+        y = (self.install_dialog.winfo_screenheight() // 2) - (150 // 2)
+        self.install_dialog.geometry(f"400x150+{x}+{y}")
         
         tk.Label(
             self.install_dialog,
-            text="🔄 Whisper STT 자동 설치 중...",
+            text="🔄 Whisper STT 자동 설치 시도 중...",
             font=('SF Pro Display', 14, 'bold'),
             bg=self.colors['card'],
             fg=self.colors['text']
-        ).pack(pady=20)
+        ).pack(pady=(30, 10))
         
         tk.Label(
             self.install_dialog,
-            text="잠시만 기다려주세요 (최초 1회)",
+            text="백그라운드에서 설치 중입니다 (최대 5분)",
             font=('SF Pro Display', 11),
             bg=self.colors['card'],
             fg=self.colors['text_secondary']
         ).pack()
         
+        # Progress bar indeterminate
         progress = ttk.Progressbar(
             self.install_dialog,
             mode='indeterminate',
@@ -141,6 +273,34 @@ class ModernMP4Converter:
         )
         progress.pack(pady=20)
         progress.start(10)
+    
+    def ask_terminal_installation(self):
+        """Ask user to install via terminal"""
+        if hasattr(self, 'install_dialog'):
+            self.install_dialog.destroy()
+        
+        result = messagebox.askyesno(
+            "Whisper 설치",
+            "자동 설치가 실패했습니다.\n\n"
+            "터미널 창을 열어 설치를 진행하시겠습니까?\n"
+            "(설치 과정을 직접 확인할 수 있습니다)"
+        )
+        
+        if result:
+            global _WHISPER_AVAILABLE
+            _WHISPER_AVAILABLE = install_whisper_with_terminal()
+            if _WHISPER_AVAILABLE:
+                self.installation_complete()
+            else:
+                messagebox.showerror(
+                    "설치 실패",
+                    "Whisper 설치에 실패했습니다.\n\n"
+                    "수동 설치 방법:\n"
+                    "1. 터미널/명령 프롬프트 열기\n"
+                    "2. 다음 명령어 실행:\n"
+                    "   pip install openai-whisper"
+                )
+    
     
     def installation_complete(self):
         """Close installation dialog"""
@@ -410,7 +570,7 @@ class ModernMP4Converter:
         button_frame = tk.Frame(parent, bg=self.colors['bg'])
         button_frame.pack(fill=tk.X, pady=(20, 0))
         
-        # Convert button
+        # Convert button with hover effect
         self.convert_button = tk.Button(
             button_frame,
             text="변환 시작",
@@ -422,37 +582,39 @@ class ModernMP4Converter:
             padx=40,
             pady=12,
             command=self.start_conversion,
-            state=tk.DISABLED
+            state=tk.DISABLED,
+            activebackground=self.colors['accent_hover'],
+            activeforeground='white'
         )
         self.convert_button.pack(side=tk.LEFT, padx=(0, 10))
         
-        # Clear button
+        # Bind hover events
+        self.convert_button.bind('<Enter>', lambda e: self.convert_button.config(bg=self.colors['accent_hover']) if self.convert_button['state'] == tk.NORMAL else None)
+        self.convert_button.bind('<Leave>', lambda e: self.convert_button.config(bg=self.colors['accent']) if self.convert_button['state'] == tk.NORMAL else None)
+        
+        # Clear button with hover effect
         self.clear_button = tk.Button(
             button_frame,
             text="초기화",
             font=('SF Pro Display', 14),
-            bg=self.colors['card'],
-            fg=self.colors['text'],
+            bg=self.colors['text_secondary'],
+            fg='white',
             relief=tk.FLAT,
             cursor='hand2',
             padx=30,
             pady=12,
             command=self.clear_files,
-            state=tk.DISABLED
+            state=tk.DISABLED,
+            activebackground='#555555',
+            activeforeground='white'
         )
         self.clear_button.pack(side=tk.LEFT)
         
-        # GitHub link
-        github_label = tk.Label(
-            button_frame,
-            text="GitHub",
-            font=('SF Pro Display', 11, 'underline'),
-            bg=self.colors['bg'],
-            fg=self.colors['text_secondary'],
-            cursor='hand2'
-        )
-        github_label.pack(side=tk.RIGHT)
-        github_label.bind("<Button-1>", lambda e: webbrowser.open('https://github.com/stresspoon/mp4tomp3'))
+        # Bind hover events
+        self.clear_button.bind('<Enter>', lambda e: self.clear_button.config(bg='#555555') if self.clear_button['state'] == tk.NORMAL else None)
+        self.clear_button.bind('<Leave>', lambda e: self.clear_button.config(bg=self.colors['text_secondary']) if self.clear_button['state'] == tk.NORMAL else None)
+        
+        # Remove GitHub link - no replacement needed
     
     def select_files(self):
         files = filedialog.askopenfilenames(
@@ -575,6 +737,17 @@ class ModernMP4Converter:
                 
                 # STT if enabled
                 if self.enable_stt.get():
+                    # Check if Whisper is available
+                    global _WHISPER_AVAILABLE
+                    if not _WHISPER_AVAILABLE:
+                        # Try to install if not available
+                        self.root.after(0, lambda: messagebox.showwarning(
+                            "Whisper 미설치",
+                            "Whisper가 설치되지 않았습니다.\n"
+                            "프로그램을 재시작하면 자동 설치됩니다."
+                        ))
+                        continue
+                    
                     self.root.after(0, lambda: self.status_label.config(
                         text=f"🎤 음성 인식 중: {input_path.name}"
                     ))

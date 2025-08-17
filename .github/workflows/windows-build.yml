@@ -18,23 +18,26 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install UPX (optional)
+        shell: pwsh
+        run: |
+          choco install upx -y
+
       - name: Install dependencies and build
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller pillow
           cd Windows_Standalone
-          pyinstaller --onefile `
-            --windowed `
-            --name "MP4toMP3" `
-            --add-binary "ffmpeg.exe;." `
-            --hidden-import "tkinter" `
-            --hidden-import "tkinter.ttk" `
-            --hidden-import "tkinter.filedialog" `
-            --hidden-import "tkinter.messagebox" `
-            --clean `
-            --noupx `
-            converter_universal.py
+          ./build.bat
           if (!(Test-Path dist/MP4toMP3.exe)) { throw "Build failed: dist/MP4toMP3.exe not found" }
           Compress-Archive -Path "dist/MP4toMP3.exe" -DestinationPath "dist/MP4toMP3_Windows.zip" -Force
 

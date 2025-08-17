@@ -39,6 +39,20 @@ echo Building standalone executable...
 echo This may take a few minutes...
 echo.
 
+REM Detect UPX (optional compression)
+set "UPX_OPT=--noupx"
+for /f "delims=" %%I in ('where upx 2^>nul') do (
+    set "UPX_DIR=%%~dpI"
+    goto :FOUND_UPX
+)
+:FOUND_UPX
+if defined UPX_DIR (
+    echo Using UPX from %UPX_DIR%
+    set "UPX_OPT=--upx-dir=\"%UPX_DIR%\""
+) else (
+    echo UPX not found. Building without UPX compression.
+)
+
 pyinstaller --onefile ^
             --windowed ^
             --name="MP4toMP3" ^
@@ -48,7 +62,7 @@ pyinstaller --onefile ^
             --hidden-import="tkinter.filedialog" ^
             --hidden-import="tkinter.messagebox" ^
             --clean ^
-            --noupx ^
+            %UPX_OPT% ^
             converter_universal.py
 
 if exist dist\MP4toMP3.exe (

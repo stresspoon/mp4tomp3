@@ -52,7 +52,6 @@ class ModernMP4Converter:
         self.current_file_index = 0
         self.start_time = None
         self.is_converting = False
-        self.selected_model = 'tiny'  # 기본 모델
         
         self.setup_modern_ui()
         
@@ -203,65 +202,99 @@ class ModernMP4Converter:
         )
         self.stt_check.pack(side=tk.LEFT)
         
-        # STT 설정 버튼
-        self.stt_config_button = tk.Button(
-            stt_inner,
-            text="설정",
+        # STT 옵션 프레임 (토글로 표시/숨김)
+        self.stt_options_frame = tk.Frame(options_frame, bg=self.colors['card'])
+        
+        # 모델 선택 프레임
+        model_select_frame = tk.Frame(self.stt_options_frame, bg=self.colors['card'])
+        model_select_frame.pack(fill=tk.X, padx=15, pady=10)
+        
+        tk.Label(
+            model_select_frame,
+            text="모델 선택:",
             font=('SF Pro Display', 11),
-            bg=self.colors['accent'],
-            fg='white',
-            relief=tk.FLAT,
-            padx=15,
-            pady=5,
-            command=self.open_whisper_settings,
-            state=tk.DISABLED
-        )
-        self.stt_config_button.pack(side=tk.RIGHT, padx=(10, 0))
+            bg=self.colors['card'],
+            fg=self.colors['text']
+        ).pack(side=tk.LEFT, padx=(0, 10))
         
-        # Model info (shown when STT is enabled)
-        self.model_frame = tk.Frame(options_frame, bg=self.colors['card'], highlightbackground=self.colors['border'], highlightthickness=1)
+        # 모델 라디오 버튼들
+        self.selected_model = tk.StringVar(value='tiny')
+        models = [
+            ('Tiny (39MB, 빠름)', 'tiny'),
+            ('Base (74MB)', 'base'),
+            ('Small (244MB, 추천)', 'small'),
+            ('Medium (769MB, 정확)', 'medium')
+        ]
         
-        model_inner = tk.Frame(self.model_frame, bg=self.colors['card'])
-        model_inner.pack(fill=tk.X, padx=15, pady=12)
+        for text, value in models:
+            rb = tk.Radiobutton(
+                model_select_frame,
+                text=text,
+                variable=self.selected_model,
+                value=value,
+                font=('SF Pro Display', 10),
+                bg=self.colors['card'],
+                fg=self.colors['text'],
+                selectcolor=self.colors['card'],
+                activebackground=self.colors['card'],
+                command=self.on_model_changed
+            )
+            rb.pack(side=tk.LEFT, padx=5)
         
-        self.model_info_label = tk.Label(
-            model_inner,
+        # 설치 상태 프레임
+        self.install_status_frame = tk.Frame(self.stt_options_frame, bg=self.colors['card'])
+        self.install_status_frame.pack(fill=tk.X, padx=15, pady=(0, 10))
+        
+        self.status_label = tk.Label(
+            self.install_status_frame,
             text="",
             font=('SF Pro Display', 11),
             bg=self.colors['card'],
             fg=self.colors['text_secondary']
         )
-        self.model_info_label.pack(side=tk.LEFT)
+        self.status_label.pack(side=tk.LEFT)
         
-        # 모델 변경 버튼
-        tk.Button(
-            model_inner,
-            text="모델 변경",
-            font=('SF Pro Display', 10),
-            bg=self.colors['text_secondary'],
+        # 설치 버튼 (필요시 표시)
+        self.install_button = tk.Button(
+            self.install_status_frame,
+            text="설치하기",
+            font=('SF Pro Display', 11, 'bold'),
+            bg=self.colors['accent'],
             fg='white',
-            relief=tk.FLAT,
-            padx=10,
-            pady=3,
-            command=self.open_whisper_settings
-        ).pack(side=tk.RIGHT)
+            relief=tk.RAISED,
+            bd=2,
+            padx=20,
+            pady=5,
+            command=self.install_whisper,
+            cursor='hand2',
+            activebackground='#e63600',
+            activeforeground='white'
+        )
+        # 초기에는 숨김
         
-        self.update_model_info()
+        # 진행률 바 (설치 중 표시)
+        self.install_progress = ttk.Progressbar(
+            self.stt_options_frame,
+            length=400,
+            mode='determinate',
+            style='modern.Horizontal.TProgressbar'
+        )
     
     def toggle_stt_options(self):
         """Show/hide STT options"""
         if self.enable_stt.get():
+            # STT 옵션 프레임 표시
+            self.stt_options_frame.pack(fill=tk.X, pady=(10, 0))
+            
             # Whisper 설치 확인
             if not self.check_whisper_ready():
-                # 설치 다이얼로그 표시
-                self.enable_stt.set(False)
-                self.open_whisper_settings()
+                # 설치 필요 표시
+                self.show_install_required()
             else:
-                self.model_frame.pack(fill=tk.X, pady=(0, 10))
-                self.stt_config_button.config(state=tk.NORMAL)
+                # 모델 정보 표시
+                self.show_model_info()
         else:
-            self.model_frame.pack_forget()
-            self.stt_config_button.config(state=tk.DISABLED)
+            self.stt_options_frame.pack_forget()
     
     def check_whisper_ready(self):
         """Whisper와 모델이 준비되었는지 확인"""
@@ -271,42 +304,122 @@ class ModernMP4Converter:
         # 설치된 모델 확인
         installed_models = self.whisper_manager.get_available_models()
         if not installed_models:
-            # 기본 모델도 없으면 False
             return False
-        
-        # 현재 선택된 모델 설정
-        if self.whisper_manager.config.get('default_model'):
-            self.selected_model = self.whisper_manager.config['default_model']
-        elif installed_models:
-            self.selected_model = installed_models[0]
         
         return True
     
-    def open_whisper_settings(self):
-        """Whisper 설정 다이얼로그 열기"""
-        def callback(installed):
-            if installed:
-                self.whisper_available = True
-                self.update_model_info()
-                # 설치 후 자동으로 STT 활성화
-                if self.check_whisper_ready():
-                    self.enable_stt.set(True)
-                    self.toggle_stt_options()
+    def show_install_required(self):
+        """설치 필요 메시지 표시"""
+        # 시스템 확인 및 추천
+        import platform
+        system = platform.system()
+        machine = platform.machine()
         
-        WhisperInstallerDialog(self.root, callback)
-    
-    def update_model_info(self):
-        """모델 정보 업데이트"""
-        installed_models = self.whisper_manager.get_available_models()
-        if installed_models:
-            default_model = self.whisper_manager.config.get('default_model', installed_models[0])
-            model_info = self.whisper_manager.MODEL_SIZES.get(default_model, {})
-            
-            self.model_info_label.config(
-                text=f"현재 모델: {default_model.upper()} ({model_info.get('accuracy', '')} / {model_info.get('speed', '')})"
+        if 'arm' in machine.lower() or 'aarch' in machine.lower():
+            # Apple Silicon
+            recommended = 'small'  # M1/M2는 small까지 빠르게 실행
+            self.status_label.config(
+                text="Apple Silicon 감지: Small 모델 추천 (빠르고 정확)",
+                fg=self.colors['accent']
             )
         else:
-            self.model_info_label.config(text="모델이 설치되지 않았습니다")
+            # Intel or others
+            recommended = 'tiny'  # Intel은 tiny 추천
+            self.status_label.config(
+                text="Whisper 설치 필요: Tiny 모델 추천 (가장 빠름)",
+                fg=self.colors['text_secondary']
+            )
+        
+        self.selected_model.set(recommended)
+        self.install_button.pack(side=tk.RIGHT, padx=(10, 0))
+    
+    def show_model_info(self):
+        """모델 정보 표시"""
+        installed_models = self.whisper_manager.get_available_models()
+        current = self.selected_model.get()
+        
+        if current in installed_models:
+            self.status_label.config(
+                text=f"✓ {current.upper()} 모델 설치됨",
+                fg=self.colors['success']
+            )
+            self.install_button.pack_forget()
+        else:
+            self.status_label.config(
+                text=f"{current.upper()} 모델 설치 필요",
+                fg=self.colors['text_secondary']
+            )
+            self.install_button.pack(side=tk.RIGHT, padx=(10, 0))
+    
+    def on_model_changed(self):
+        """모델 선택 변경시"""
+        if self.check_whisper_ready():
+            self.show_model_info()
+    
+    def install_whisper(self):
+        """Whisper 설치"""
+        self.install_button.config(state=tk.DISABLED)
+        self.install_progress.pack(fill=tk.X, padx=15, pady=5)
+        
+        def install_thread():
+            try:
+                # Whisper 설치
+                if not self.whisper_manager.is_whisper_installed():
+                    self.update_install_progress(10, "Whisper 엔진 설치 중...")
+                    success = self.whisper_manager.install_whisper_minimal(
+                        lambda p, m: self.update_install_progress(p * 0.5, m)
+                    )
+                    if not success:
+                        self.install_failed("Whisper 설치 실패")
+                        return
+                
+                # 모델 다운로드
+                model = self.selected_model.get()
+                self.update_install_progress(50, f"{model.upper()} 모델 다운로드 중...")
+                success = self.whisper_manager.download_model(
+                    model,
+                    lambda p, m: self.update_install_progress(50 + p * 0.5, m)
+                )
+                
+                if success:
+                    self.install_complete()
+                else:
+                    self.install_failed("모델 다운로드 실패")
+                    
+            except Exception as e:
+                self.install_failed(str(e))
+        
+        thread = threading.Thread(target=install_thread, daemon=True)
+        thread.start()
+    
+    def update_install_progress(self, percent, message):
+        """설치 진행률 업데이트"""
+        self.root.after(0, lambda: self._update_progress_ui(percent, message))
+    
+    def _update_progress_ui(self, percent, message):
+        self.status_label.config(text=message)
+        self.install_progress['value'] = percent
+    
+    def install_complete(self):
+        """설치 완료"""
+        self.root.after(0, lambda: self._install_complete_ui())
+    
+    def _install_complete_ui(self):
+        self.install_progress.pack_forget()
+        self.install_button.config(state=tk.NORMAL)
+        self.whisper_available = True
+        self.show_model_info()
+        messagebox.showinfo("설치 완료", "Whisper STT가 성공적으로 설치되었습니다!")
+    
+    def install_failed(self, error):
+        """설치 실패"""
+        self.root.after(0, lambda: self._install_failed_ui(error))
+    
+    def _install_failed_ui(self, error):
+        self.install_progress.pack_forget()
+        self.install_button.config(state=tk.NORMAL)
+        messagebox.showerror("설치 실패", f"설치 중 오류가 발생했습니다:\n{error}")
+    
     
     def create_progress_section(self, parent):
         """Create modern progress section"""
@@ -466,14 +579,17 @@ class ModernMP4Converter:
         
         # STT 사용 시 모델 로드
         if self.enable_stt.get():
-            if not self.check_whisper_ready():
-                messagebox.showwarning("STT 불가", "Whisper가 설치되지 않았습니다.\nSTT 없이 변환을 진행합니다.")
+            model_name = self.selected_model.get()
+            installed = self.whisper_manager.get_available_models()
+            
+            if not self.whisper_manager.is_whisper_installed() or model_name not in installed:
+                messagebox.showwarning("STT 불가", f"{model_name.upper()} 모델이 설치되지 않았습니다.\nSTT 없이 변환을 진행합니다.")
                 self.enable_stt.set(False)
             else:
                 # 모델 미리 로드
                 try:
-                    self.status_label.config(text="AI 모델 로딩 중...")
-                    self.whisper_model = self.whisper_manager.load_model(self.selected_model)
+                    self.status_label.config(text=f"{model_name.upper()} 모델 로딩 중...")
+                    self.whisper_model = self.whisper_manager.load_model(model_name)
                 except Exception as e:
                     messagebox.showwarning("모델 로드 실패", f"AI 모델을 로드할 수 없습니다.\n{e}")
                     self.enable_stt.set(False)
@@ -491,6 +607,29 @@ class ModernMP4Converter:
         thread = threading.Thread(target=self.convert_files)
         thread.daemon = True
         thread.start()
+    
+    def get_file_duration(self, file_path):
+        """Get duration of media file in seconds"""
+        try:
+            cmd = [
+                self.ffmpeg_path or 'ffmpeg',
+                '-i', file_path,
+                '-f', 'null',
+                '-'
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            # Parse duration from stderr
+            import re
+            duration_match = re.search(r'Duration: (\d{2}):(\d{2}):(\d{2})\.\d+', result.stderr)
+            if duration_match:
+                hours = int(duration_match.group(1))
+                minutes = int(duration_match.group(2))
+                seconds = int(duration_match.group(3))
+                return hours * 3600 + minutes * 60 + seconds
+        except:
+            pass
+        return 0
     
     def check_ffmpeg(self):
         # Check for embedded ffmpeg
@@ -537,12 +676,11 @@ class ModernMP4Converter:
             input_path = Path(file_path)
             output_path = input_path.with_suffix('.mp3')
             
-            # Update UI
-            percent = int(((i + 0.5) / total) * 100)
-            self.root.after(0, self.update_progress, input_path.name, percent)
+            # Get file duration first
+            duration = self.get_file_duration(str(input_path))
             
             try:
-                # Convert to MP3
+                # Convert to MP3 with real-time progress
                 cmd = [
                     self.ffmpeg_path,
                     '-i', str(input_path),
@@ -550,10 +688,32 @@ class ModernMP4Converter:
                     '-acodec', 'libmp3lame',
                     '-ab', '192k',
                     '-y',
+                    '-progress', 'pipe:1',  # Output progress to stdout
                     str(output_path)
                 ]
                 
-                subprocess.run(cmd, capture_output=True)
+                # Use Popen for real-time progress
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+                
+                # Read progress
+                while True:
+                    line = process.stdout.readline()
+                    if not line:
+                        break
+                    
+                    # Parse progress
+                    if 'out_time_ms=' in line:
+                        try:
+                            time_ms = int(line.split('=')[1])
+                            current_seconds = time_ms / 1000000
+                            if duration > 0:
+                                file_percent = min(int((current_seconds / duration) * 100), 100)
+                                overall_percent = int(((i + file_percent/100) / total) * 100)
+                                self.root.after(0, self.update_progress, input_path.name, overall_percent)
+                        except:
+                            pass
+                
+                process.wait()
                 
                 # STT if enabled
                 if self.enable_stt.get() and self.whisper_model:

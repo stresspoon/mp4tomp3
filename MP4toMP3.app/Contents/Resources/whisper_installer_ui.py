@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Whisper 설치 UI - 사용자 친화적 설치 경험
+Whisper 설치 UI - 사용자 친화적 설치 경험 (Fixed version)
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
 from whisper_manager import WhisperManager
-from custom_widgets import RoundedButton, RoundedFrame
 
 class WhisperInstallerDialog:
     """Whisper 설치 다이얼로그"""
@@ -20,7 +19,7 @@ class WhisperInstallerDialog:
         # 다이얼로그 생성
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Whisper STT 설정")
-        self.dialog.geometry("500x600")
+        self.dialog.geometry("500x650")
         self.dialog.resizable(False, False)
         
         # 색상 테마 (디자인 가이드 준수)
@@ -42,20 +41,21 @@ class WhisperInstallerDialog:
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         
-        # 디버그: 버튼 상태 확인
-        self.dialog.after(100, self.check_button_visibility)
-        
     def center_window(self):
         """창 중앙 정렬"""
         self.dialog.update_idletasks()
         x = (self.dialog.winfo_screenwidth() // 2) - (500 // 2)
-        y = (self.dialog.winfo_screenheight() // 2) - (600 // 2)
-        self.dialog.geometry(f"500x600+{x}+{y}")
+        y = (self.dialog.winfo_screenheight() // 2) - (650 // 2)
+        self.dialog.geometry(f"500x650+{x}+{y}")
     
     def setup_ui(self):
         """UI 구성"""
+        # Main container with scrollbar
+        main_frame = tk.Frame(self.dialog, bg=self.colors['bg'])
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
         # 제목
-        title_frame = tk.Frame(self.dialog, bg=self.colors['bg'])
+        title_frame = tk.Frame(main_frame, bg=self.colors['bg'])
         title_frame.pack(fill=tk.X, padx=20, pady=(20, 10))
         
         tk.Label(
@@ -75,8 +75,8 @@ class WhisperInstallerDialog:
         ).pack()
         
         # 모델 선택 카드들
-        models_frame = tk.Frame(self.dialog, bg=self.colors['bg'])
-        models_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        models_frame = tk.Frame(main_frame, bg=self.colors['bg'])
+        models_frame.pack(fill=tk.X, padx=20, pady=10)
         
         self.selected_model = tk.StringVar(value='tiny')
         self.model_cards = []
@@ -117,7 +117,7 @@ class WhisperInstallerDialog:
             self.model_cards.append(card)
         
         # 설치 옵션
-        options_frame = tk.Frame(self.dialog, bg=self.colors['card'], relief=tk.FLAT, bd=1)
+        options_frame = tk.Frame(main_frame, bg=self.colors['card'], relief=tk.FLAT, bd=1)
         options_frame.pack(fill=tk.X, padx=20, pady=10)
         
         self.auto_install = tk.BooleanVar(value=True)
@@ -134,7 +134,7 @@ class WhisperInstallerDialog:
         check.pack(padx=10, pady=10)
         
         # 공간 정보
-        info_frame = tk.Frame(self.dialog, bg=self.colors['bg'])
+        info_frame = tk.Frame(main_frame, bg=self.colors['bg'])
         info_frame.pack(fill=tk.X, padx=20, pady=5)
         
         self.space_label = tk.Label(
@@ -148,7 +148,7 @@ class WhisperInstallerDialog:
         self.update_space_info()
         
         # 진행률 표시 (숨김)
-        self.progress_frame = tk.Frame(self.dialog, bg=self.colors['bg'])
+        self.progress_frame = tk.Frame(main_frame, bg=self.colors['bg'])
         
         self.progress_label = tk.Label(
             self.progress_frame,
@@ -176,92 +176,54 @@ class WhisperInstallerDialog:
         )
         self.progress_bar.pack(pady=5)
         
-        # 버튼 (명확하게 보이도록 배경색 추가)
-        button_frame = tk.Frame(self.dialog, bg=self.colors['bg'], height=60)
-        # Anchor buttons to bottom so they always show
-        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=(10, 20))
-        button_frame.pack_propagate(False)  # 고정 높이 유지
+        # 버튼 프레임 - 하단에 고정
+        button_frame = tk.Frame(self.dialog, bg=self.colors['bg'])
+        button_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=20, pady=20)
         
-        # 설치 버튼 (둥근 모서리 효과)
-        if RoundedButton:
-            self.install_button = RoundedButton(
-                button_frame,
-                width=120,
-                height=44,
-                corner_radius=12,
-                text="설치 시작",
-                bg_color=self.colors['accent'],
-                fg_color='white',
-                hover_color='#e63600',
-                font=('SF Pro Display', 12, 'bold'),
-                command=self.start_installation
-            )
-            self.install_button.pack(side=tk.LEFT, padx=5)
-        else:
-            self.install_button = tk.Button(
-                button_frame,
-                text="설치 시작",
-                font=('SF Pro Display', 14, 'bold'),  # 크기 증가
-                bg='#ff3d00',  # 직접 색상 지정
-                fg='white',
-                relief=tk.RAISED,
-                bd=2,  # 테두리 추가
-                padx=40,  # 패딩 증가
-                pady=15,  # 패딩 증가
-                command=self.start_installation,
-                cursor='hand2',
-                highlightthickness=0,
-                activebackground='#e63600',
-                activeforeground='white'
-            )
-            self.install_button.pack(side=tk.LEFT, padx=5, pady=5)
-            
-            # 버튼이 제대로 표시되는지 확인
-            print(f"Install button created: {self.install_button.winfo_exists()}")
-            
-            # 호버 효과
-            self.install_button.bind('<Enter>', lambda e: self.install_button.config(bg='#e63600'))
-            self.install_button.bind('<Leave>', lambda e: self.install_button.config(bg='#ff3d00'))
+        # 버튼 컨테이너
+        button_container = tk.Frame(button_frame, bg=self.colors['bg'])
+        button_container.pack()
         
-        # 취소 버튼
-        if RoundedButton:
-            cancel_btn = RoundedButton(
-                button_frame,
-                width=100,
-                height=44,
-                corner_radius=12,
-                text="나중에",
-                bg_color=self.colors['text_secondary'],
-                fg_color='white',
-                hover_color='#555555',
-                font=('SF Pro Display', 12),
-                command=self.dialog.destroy
-            )
-            cancel_btn.pack(side=tk.LEFT, padx=5, pady=5)
-        else:
-            cancel_btn = tk.Button(
-                button_frame,
-                text="나중에",
-                font=('SF Pro Display', 14),  # 크기 증가
-                bg='#666666',  # 직접 색상 지정
-                fg='white',
-                relief=tk.RAISED,
-                bd=2,  # 테두리 추가
-                padx=30,  # 패딩 증가
-                pady=15,  # 패딩 증가
-                command=self.dialog.destroy,
-                cursor='hand2',
-                highlightthickness=0,
-                activebackground='#555555',
-                activeforeground='white'
-            )
-            cancel_btn.pack(side=tk.LEFT, padx=5, pady=5)
-            
-            # 호버 효과
-            cancel_btn.bind('<Enter>', lambda e: cancel_btn.config(bg='#555555'))
-            cancel_btn.bind('<Leave>', lambda e: cancel_btn.config(bg=self.colors['text_secondary']))
+        # 설치 시작 버튼 - 크고 명확하게
+        self.install_button = tk.Button(
+            button_container,
+            text="설치 시작",
+            font=('SF Pro Display', 16, 'bold'),
+            bg='#ff3d00',
+            fg='white',
+            relief=tk.RAISED,
+            bd=3,
+            padx=50,
+            pady=12,
+            command=self.start_installation,
+            cursor='hand2',
+            activebackground='#e63600',
+            activeforeground='white',
+            highlightthickness=2,
+            highlightbackground='#ff3d00',
+            highlightcolor='#ff3d00'
+        )
+        self.install_button.grid(row=0, column=0, padx=10)
         
-        # STT 없이 사용 옵션
+        # 나중에 버튼
+        cancel_btn = tk.Button(
+            button_container,
+            text="나중에",
+            font=('SF Pro Display', 14),
+            bg='#666666',
+            fg='white',
+            relief=tk.RAISED,
+            bd=2,
+            padx=30,
+            pady=12,
+            command=self.dialog.destroy,
+            cursor='hand2',
+            activebackground='#555555',
+            activeforeground='white'
+        )
+        cancel_btn.grid(row=0, column=1, padx=10)
+        
+        # STT 없이 사용 버튼
         skip_btn = tk.Button(
             button_frame,
             text="STT 없이 사용",
@@ -273,25 +235,19 @@ class WhisperInstallerDialog:
             cursor='hand2',
             bd=0
         )
-        skip_btn.pack(side=tk.RIGHT)
+        skip_btn.pack(pady=(10, 0))
         
-        # 호버 효과 (텍스트 색상만 변경)
+        # 호버 효과
+        self.install_button.bind('<Enter>', lambda e: self.install_button.config(bg='#e63600'))
+        self.install_button.bind('<Leave>', lambda e: self.install_button.config(bg='#ff3d00'))
+        cancel_btn.bind('<Enter>', lambda e: cancel_btn.config(bg='#555555'))
+        cancel_btn.bind('<Leave>', lambda e: cancel_btn.config(bg='#666666'))
         skip_btn.bind('<Enter>', lambda e: skip_btn.config(fg=self.colors['accent']))
         skip_btn.bind('<Leave>', lambda e: skip_btn.config(fg=self.colors['text_secondary']))
     
-    def check_button_visibility(self):
-        """버튼 가시성 확인"""
-        try:
-            if hasattr(self, 'install_button'):
-                visible = self.install_button.winfo_viewable()
-                geometry = self.install_button.winfo_geometry()
-                print(f"Install button visible: {visible}, geometry: {geometry}")
-        except:
-            pass
-    
     def create_model_card(self, parent, model, index):
         """모델 선택 카드 생성"""
-        # 카드 프레임 (둥근 모서리 효과)
+        # 카드 프레임
         card = tk.Frame(
             parent,
             bg=self.colors['card'],
@@ -420,10 +376,7 @@ class WhisperInstallerDialog:
     
     def start_installation(self):
         """설치 시작"""
-        if RoundedButton and hasattr(self.install_button, 'config'):
-            self.install_button.config(state='disabled')
-        else:
-            self.install_button.config(state=tk.DISABLED)
+        self.install_button.config(state=tk.DISABLED)
         self.progress_frame.pack(fill=tk.X, padx=20, pady=10, before=self.space_label.master)
         
         def install_thread():
@@ -479,10 +432,7 @@ class WhisperInstallerDialog:
     def _installation_failed_ui(self, error):
         """UI 스레드에서 설치 실패 처리"""
         messagebox.showerror("설치 실패", f"설치 중 오류가 발생했습니다:\n{error}")
-        if RoundedButton and hasattr(self.install_button, 'config'):
-            self.install_button.config(state='normal')
-        else:
-            self.install_button.config(state=tk.NORMAL)
+        self.install_button.config(state=tk.NORMAL)
         self.progress_frame.pack_forget()
     
     def skip_stt(self):

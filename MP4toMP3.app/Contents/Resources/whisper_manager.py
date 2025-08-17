@@ -8,6 +8,7 @@ import sys
 import json
 import hashlib
 import urllib.request
+import time
 from pathlib import Path
 import subprocess
 
@@ -168,26 +169,48 @@ class WhisperManager:
         try:
             if progress_callback:
                 progress_callback(0, f"{model_name.upper()} 모델 다운로드 중... ({model_info['size']}MB)")
-            
-            # Whisper 모델 URL
+
+            # 1차: Azure CDN, 2차: Hugging Face
             model_hash = self._get_model_hash(model_name)
-            if not model_hash:
-                if progress_callback:
-                    progress_callback(0, f"모델 {model_name}을 찾을 수 없습니다")
+            primary = f"https://openaipublic.azureedge.net/main/whisper/models/{model_hash}/{model_name}.pt" if model_hash else None
+            mirror = f"https://huggingface.co/openai/whisper-{model_name}/resolve/main/{model_name}.pt"
+            urls = [u for u in [primary, mirror] if u]
+
+            def _download_with_retries(url_list, dest):
+                last_err = None
+                for url in url_list:
+                    for attempt in range(4):
+                        try:
+                            req = urllib.request.Request(url)
+                            opener = urllib.request.build_opener()  # proxies from env respected
+                            with opener.open(req, timeout=30) as resp:
+                                total = int(resp.getheader('Content-Length') or 0)
+                                downloaded = 0
+                                with open(dest, 'wb') as f:
+                                    while True:
+                                        chunk = resp.read(8192)
+                                        if not chunk:
+                                            break
+                                        f.write(chunk)
+                                        downloaded += len(chunk)
+                                        if progress_callback and total:
+                                            percent = min(int(downloaded * 100 / total), 100)
+                                            progress_callback(percent, f"다운로드 중... {downloaded/(1024*1024):.1f}/{total/(1024*1024):.1f} MB ({percent}%)")
+                            return True
+                        except Exception as e:
+                            last_err = str(e)
+                            time.sleep(min(2 ** attempt, 10))
+                    # 다음 URL 시도
+                if last_err:
+                    self.last_error = last_err
                 return False
-            url = f"https://openaipublic.azureedge.net/main/whisper/models/{model_hash}/{model_name}.pt"
-            
-            # 다운로드 with progress
-            def download_hook(block_num, block_size, total_size):
-                downloaded = block_num * block_size
-                percent = min(int(downloaded * 100 / total_size), 100) if total_size > 0 else 0
+
+            ok = _download_with_retries(urls, model_file)
+            if not ok:
                 if progress_callback:
-                    mb_downloaded = downloaded / (1024 * 1024)
-                    mb_total = total_size / (1024 * 1024)
-                    progress_callback(percent, f"다운로드 중... {mb_downloaded:.1f}/{mb_total:.1f} MB ({percent}%)")
-            
-            urllib.request.urlretrieve(url, model_file, reporthook=download_hook)
-            
+                    progress_callback(0, f"모델 다운로드 실패: {self.last_error[:200]}")
+                return False
+
             # 설정 업데이트
             if model_name not in self.config['installed_models']:
                 self.config['installed_models'].append(model_name)

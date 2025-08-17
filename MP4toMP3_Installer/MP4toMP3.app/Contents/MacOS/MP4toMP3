@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Get the directory where this script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+RESOURCES_DIR="$DIR/../Resources"
+
+# Try different Python installations
+if [ -f "/opt/homebrew/opt/python@3.13/bin/python3.13" ]; then
+    PYTHON="/opt/homebrew/opt/python@3.13/bin/python3.13"
+elif [ -f "/opt/homebrew/bin/python3" ]; then
+    PYTHON="/opt/homebrew/bin/python3"
+elif [ -f "/usr/local/bin/python3" ]; then
+    PYTHON="/usr/local/bin/python3"
+elif [ -f "/usr/bin/python3" ]; then
+    PYTHON="/usr/bin/python3"
+else
+    PYTHON="python3"
+fi
+
+# Run the Python script
+exec "$PYTHON" "$RESOURCES_DIR/converter.py" "$@"

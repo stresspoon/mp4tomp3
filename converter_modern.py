@@ -59,49 +59,64 @@ def install_whisper_with_terminal():
     try:
         print("Opening terminal for Whisper installation...")
         
-        # Create installation script
-        install_script = '''
+        # Create installation script - use raw string to avoid escape issues
+        install_script = r'''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import subprocess
 import sys
 import time
+import os
 
 print("="*60)
-print("🔄 Whisper STT 자동 설치")
+print("Whisper STT Auto Installation")
 print("="*60)
 print()
-print("설치가 진행되는 동안 잠시 기다려주세요...")
-print("문제가 발생하면 Ctrl+C로 중단할 수 있습니다.")
+print("Installing Whisper... Please wait...")
+print("Press Ctrl+C to cancel if needed.")
 print()
 
 try:
-    # Install without pip upgrade to avoid hanging
-    print("📦 Whisper 패키지 설치 중...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "openai-whisper"], 
-                         timeout=300)
+    # Show progress with real output
+    print("[1/2] Installing Whisper package...")
+    process = subprocess.Popen(
+        [sys.executable, "-m", "pip", "install", "openai-whisper"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        universal_newlines=True,
+        bufsize=1
+    )
+    
+    # Show real-time output
+    for line in process.stdout:
+        print(line.rstrip())
+    
+    process.wait()
+    
+    if process.returncode != 0:
+        raise Exception("Installation failed")
     
     # Verify installation
+    print()
+    print("[2/2] Verifying installation...")
     import whisper
     print()
     print("="*60)
-    print("✅ Whisper 설치 완료!")
-    print("창이 5초 후 자동으로 닫힙니다...")
+    print("SUCCESS! Whisper installed successfully!")
+    print("This window will close in 5 seconds...")
     print("="*60)
     time.sleep(5)
-    sys.exit(0)
     
-except subprocess.TimeoutExpired:
-    print("\n❌ 설치 시간 초과 (5분)")
-    print("인터넷 연결을 확인하고 다시 시도해주세요.")
-    input("\nEnter 키를 눌러 종료...")
-    sys.exit(1)
+except KeyboardInterrupt:
+    print("\n\nInstallation cancelled by user.")
+    time.sleep(2)
 except Exception as e:
-    print(f"\n❌ 설치 실패: {e}")
-    print("수동 설치 방법:")
-    print("1. 터미널/명령 프롬프트 열기")
-    print("2. 다음 명령어 실행: pip install openai-whisper")
-    input("\nEnter 키를 눌러 종료...")
-    sys.exit(1)
-'''
+    print(f"\n\nERROR: Installation failed: {e}")
+    print("\nManual installation:")
+    print("1. Open terminal")
+    print("2. Run: pip install openai-whisper")
+    print("\nPress Enter to close...")
+    input()
+'''.replace('\\n', '\n')
         
         # Save script temporarily
         import tempfile
@@ -109,35 +124,61 @@ except Exception as e:
             f.write(install_script)
             script_path = f.name
         
+        # Make script executable on Unix
+        if platform.system() != 'Windows':
+            os.chmod(script_path, 0o755)
+        
         # Run script in new terminal window
         if platform.system() == 'Darwin':  # macOS
-            subprocess.run([
-                'osascript', '-e',
-                f'tell app "Terminal" to do script "python3 {script_path}"'
-            ])
+            # Use osascript to open Terminal and run the script
+            apple_script = f'''tell application "Terminal"
+                activate
+                do script "python3 '{script_path}'; exit"
+            end tell'''
+            subprocess.run(['osascript', '-e', apple_script])
         elif platform.system() == 'Windows':
-            subprocess.Popen([
-                'start', 'cmd', '/k',
-                f'python "{script_path}" & exit'
-            ], shell=True)
+            # Windows: Use start command to open new cmd window
+            subprocess.Popen(
+                f'start "Whisper Installation" cmd /c "python "{script_path}" & pause"',
+                shell=True
+            )
         else:  # Linux
-            subprocess.Popen([
-                'x-terminal-emulator', '-e',
-                f'python3 {script_path}'
-            ])
+            # Try different terminal emulators
+            terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator']
+            for term in terminals:
+                try:
+                    if term == 'gnome-terminal':
+                        subprocess.Popen([term, '--', 'python3', script_path])
+                    else:
+                        subprocess.Popen([term, '-e', f'python3 {script_path}'])
+                    break
+                except:
+                    continue
         
         # Wait and check if installation succeeded
-        for _ in range(60):  # Check for 1 minute
+        max_wait = 120  # 2 minutes
+        for i in range(max_wait):
             time.sleep(1)
             try:
-                import whisper
+                # Try to import whisper
+                import importlib
+                importlib.invalidate_caches()
+                whisper_module = importlib.import_module('whisper')
+                
                 # Clean up temp file
                 try:
+                    time.sleep(2)  # Give terminal time to finish
                     os.unlink(script_path)
                 except:
                     pass
                 return True
             except ImportError:
+                if i == max_wait - 1:
+                    # Last attempt - clean up anyway
+                    try:
+                        os.unlink(script_path)
+                    except:
+                        pass
                 continue
         
         return False
@@ -221,24 +262,48 @@ class ModernMP4Converter:
         try:
             global _WHISPER_AVAILABLE
             if not _WHISPER_AVAILABLE:
-                # Show simple notification
-                self.root.after(0, lambda: self.show_installation_notice())
-                
-                # Try silent installation first
-                _WHISPER_AVAILABLE = install_whisper_silent()
-                
-                if not _WHISPER_AVAILABLE:
-                    # If silent fails, ask user for terminal installation
-                    self.root.after(0, lambda: self.ask_terminal_installation())
-                else:
-                    self.root.after(0, lambda: self.installation_complete())
+                # Ask user immediately for installation method
+                self.root.after(100, lambda: self.ask_installation_method())
         except Exception as e:
             print(f"Whisper check error: {e}")
     
-    def show_installation_notice(self):
-        """Show simple installation notice"""
+    def ask_installation_method(self):
+        """Ask user which installation method to use"""
+        result = messagebox.askyesnocancel(
+            "Whisper STT 설치 필요",
+            "Whisper STT가 설치되지 않았습니다.\n\n"
+            "터미널 창에서 설치를 진행하시겠습니까?\n"
+            "(설치 과정을 실시간으로 확인할 수 있습니다)\n\n"
+            "Yes: 터미널에서 설치\n"
+            "No: 백그라운드 설치 (보이지 않음)\n"
+            "Cancel: 나중에 설치"
+        )
+        
+        global _WHISPER_AVAILABLE
+        
+        if result is True:  # Yes - Terminal installation
+            _WHISPER_AVAILABLE = install_whisper_with_terminal()
+            if _WHISPER_AVAILABLE:
+                self.installation_complete()
+            else:
+                self.installation_failed()
+        elif result is False:  # No - Background installation
+            self.show_background_installation()
+            # Run in thread to not block UI
+            def bg_install():
+                global _WHISPER_AVAILABLE
+                _WHISPER_AVAILABLE = install_whisper_silent()
+                if _WHISPER_AVAILABLE:
+                    self.root.after(0, lambda: self.installation_complete())
+                else:
+                    self.root.after(0, lambda: self.installation_failed())
+            threading.Thread(target=bg_install, daemon=True).start()
+        # else: Cancel - do nothing
+    
+    def show_background_installation(self):
+        """Show background installation progress"""
         self.install_dialog = tk.Toplevel(self.root)
-        self.install_dialog.title("Whisper STT 설치")
+        self.install_dialog.title("Whisper 설치 중")
         self.install_dialog.geometry("400x150")
         self.install_dialog.configure(bg=self.colors['card'])
         self.install_dialog.transient(self.root)
@@ -251,7 +316,7 @@ class ModernMP4Converter:
         
         tk.Label(
             self.install_dialog,
-            text="🔄 Whisper STT 자동 설치 시도 중...",
+            text="🔄 Whisper STT 설치 중...",
             font=('SF Pro Display', 14, 'bold'),
             bg=self.colors['card'],
             fg=self.colors['text']
@@ -259,13 +324,13 @@ class ModernMP4Converter:
         
         tk.Label(
             self.install_dialog,
-            text="백그라운드에서 설치 중입니다 (최대 5분)",
+            text="백그라운드에서 설치 중 (최대 5분)",
             font=('SF Pro Display', 11),
             bg=self.colors['card'],
             fg=self.colors['text_secondary']
         ).pack()
         
-        # Progress bar indeterminate
+        # Progress bar
         progress = ttk.Progressbar(
             self.install_dialog,
             mode='indeterminate',
@@ -274,32 +339,19 @@ class ModernMP4Converter:
         progress.pack(pady=20)
         progress.start(10)
     
-    def ask_terminal_installation(self):
-        """Ask user to install via terminal"""
+    def installation_failed(self):
+        """Show installation failure message"""
         if hasattr(self, 'install_dialog'):
             self.install_dialog.destroy()
         
-        result = messagebox.askyesno(
-            "Whisper 설치",
-            "자동 설치가 실패했습니다.\n\n"
-            "터미널 창을 열어 설치를 진행하시겠습니까?\n"
-            "(설치 과정을 직접 확인할 수 있습니다)"
+        messagebox.showerror(
+            "설치 실패",
+            "Whisper 설치에 실패했습니다.\n\n"
+            "수동 설치 방법:\n"
+            "1. 터미널/명령 프롬프트 열기\n"
+            "2. 다음 명령어 실행:\n"
+            "   pip install openai-whisper"
         )
-        
-        if result:
-            global _WHISPER_AVAILABLE
-            _WHISPER_AVAILABLE = install_whisper_with_terminal()
-            if _WHISPER_AVAILABLE:
-                self.installation_complete()
-            else:
-                messagebox.showerror(
-                    "설치 실패",
-                    "Whisper 설치에 실패했습니다.\n\n"
-                    "수동 설치 방법:\n"
-                    "1. 터미널/명령 프롬프트 열기\n"
-                    "2. 다음 명령어 실행:\n"
-                    "   pip install openai-whisper"
-                )
     
     
     def installation_complete(self):

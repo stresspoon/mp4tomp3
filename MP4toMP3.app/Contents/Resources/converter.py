@@ -12,213 +12,10 @@ import re
 import urllib.request
 import webbrowser
 
-# Whisper 자동 설치 함수
-def ensure_whisper_installed(show_terminal=False):
-    """Whisper가 설치되어 있지 않으면 자동으로 설치"""
-    try:
-        import whisper
-        return True
-    except ImportError:
-        if show_terminal:
-            return install_whisper_with_terminal()
-        else:
-            return install_whisper_silent()
-
-def install_whisper_silent():
-    """Silent installation with timeout"""
-    try:
-        print("Installing Whisper in background...")
-        # Simple installation without pip upgrade to avoid hanging
-        process = subprocess.Popen(
-            [sys.executable, "-m", "pip", "install", "openai-whisper"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True
-        )
-        
-        # Wait with timeout (5 minutes)
-        try:
-            process.wait(timeout=300)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            print("Installation timeout - switching to terminal mode")
-            return install_whisper_with_terminal()
-        
-        # Check if successful
-        try:
-            import whisper
-            return True
-        except ImportError:
-            return False
-    except Exception as e:
-        print(f"Silent installation failed: {e}")
-        return False
-
-def install_whisper_with_terminal():
-    """Installation with visible terminal"""
-    try:
-        print("Opening terminal for Whisper installation...")
-        
-        # Create installation script - use raw string to avoid escape issues
-        install_script = r'''#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-import subprocess
-import sys
-import time
-import os
-
-print("="*60)
-print("Whisper STT Auto Installation")
-print("="*60)
-print()
-print("Installing Whisper... Please wait...")
-print("Press Ctrl+C to cancel if needed.")
-print()
-
-try:
-    # Show progress with real output
-    print("[1/2] Installing Whisper package...")
-    process = subprocess.Popen(
-        [sys.executable, "-m", "pip", "install", "openai-whisper"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        universal_newlines=True,
-        bufsize=1
-    )
-    
-    # Show real-time output
-    for line in process.stdout:
-        print(line.rstrip())
-    
-    process.wait()
-    
-    if process.returncode != 0:
-        raise Exception("Installation failed")
-    
-    # Verify installation
-    print()
-    print("[2/2] Verifying installation...")
-    import whisper
-    print()
-    print("="*60)
-    print("SUCCESS! Whisper installed successfully!")
-    print("This window will close in 5 seconds...")
-    print("="*60)
-    time.sleep(5)
-    
-except KeyboardInterrupt:
-    print("\n\nInstallation cancelled by user.")
-    time.sleep(2)
-except Exception as e:
-    print(f"\n\nERROR: Installation failed: {e}")
-    print("\nManual installation:")
-    print("1. Open terminal")
-    print("2. Run: pip install openai-whisper")
-    print("\nPress Enter to close...")
-    input()
-'''.replace('\\n', '\n')
-        
-        # Save script temporarily
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-            f.write(install_script)
-            script_path = f.name
-        
-        # Make script executable on Unix
-        if platform.system() != 'Windows':
-            os.chmod(script_path, 0o755)
-        
-        # Run script in new terminal window
-        if platform.system() == 'Darwin':  # macOS
-            # Use osascript to open Terminal and run the script
-            apple_script = f'''tell application "Terminal"
-                activate
-                do script "python3 '{script_path}'; exit"
-            end tell'''
-            subprocess.run(['osascript', '-e', apple_script])
-        elif platform.system() == 'Windows':
-            # Windows: Use start command to open new cmd window
-            subprocess.Popen(
-                f'start "Whisper Installation" cmd /c "python "{script_path}" & pause"',
-                shell=True
-            )
-        else:  # Linux
-            # Try different terminal emulators
-            terminals = ['gnome-terminal', 'konsole', 'xterm', 'x-terminal-emulator']
-            for term in terminals:
-                try:
-                    if term == 'gnome-terminal':
-                        subprocess.Popen([term, '--', 'python3', script_path])
-                    else:
-                        subprocess.Popen([term, '-e', f'python3 {script_path}'])
-                    break
-                except:
-                    continue
-        
-        # Wait and check if installation succeeded
-        max_wait = 120  # 2 minutes
-        for i in range(max_wait):
-            time.sleep(1)
-            try:
-                # Try to import whisper
-                import importlib
-                importlib.invalidate_caches()
-                whisper_module = importlib.import_module('whisper')
-                
-                # Clean up temp file
-                try:
-                    time.sleep(2)  # Give terminal time to finish
-                    os.unlink(script_path)
-                except:
-                    pass
-                return True
-            except ImportError:
-                if i == max_wait - 1:
-                    # Last attempt - clean up anyway
-                    try:
-                        os.unlink(script_path)
-                    except:
-                        pass
-                continue
-        
-        return False
-        
-    except Exception as e:
-        print(f"Terminal installation failed: {e}")
-        return False
-
-# 앱 시작 시 Whisper 확인 (설치는 나중에)
-_WHISPER_AVAILABLE = False
-try:
-    import whisper
-    _WHISPER_AVAILABLE = True
-except ImportError:
-    _WHISPER_AVAILABLE = False
-
-_WHISPER_MODEL_CACHE = {}
-
-def load_whisper_model(model_name: str):
-    """Load whisper model with auto-installation"""
-    global _WHISPER_MODEL_CACHE
-    
-    if not _WHISPER_AVAILABLE:
-        if not ensure_whisper_installed():
-            raise RuntimeError("Whisper 설치에 실패했습니다")
-    
-    device = 'cpu'
-    key = f'{model_name}:{device}'
-    
-    if key in _WHISPER_MODEL_CACHE:
-        return _WHISPER_MODEL_CACHE[key]
-    
-    try:
-        import whisper
-        print(f"Loading Whisper model: {model_name}")
-        model = whisper.load_model(model_name, device=device)
-        _WHISPER_MODEL_CACHE[key] = model
-        return model
-    except Exception as e:
-        raise RuntimeError(f'모델 로드 실패: {e}')
+# Whisper Manager 통합
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from whisper_manager import WhisperManager
+from whisper_installer_ui import WhisperInstallerDialog
 
 class ModernMP4Converter:
     def __init__(self, root):
@@ -246,119 +43,18 @@ class ModernMP4Converter:
         if platform.system() == 'Darwin':
             self.root.createcommand('tk::mac::ShowPreferences', lambda: None)
         
+        # Whisper Manager 초기화
+        self.whisper_manager = WhisperManager()
+        self.whisper_model = None
+        self.whisper_available = self.whisper_manager.is_whisper_installed()
+        
         self.files_to_convert = []
         self.current_file_index = 0
         self.start_time = None
         self.is_converting = False
-        self.selected_model = 'small'
+        self.selected_model = 'tiny'  # 기본 모델
         
         self.setup_modern_ui()
-        
-        # Auto-install Whisper in background
-        threading.Thread(target=self.check_whisper_installation, daemon=True).start()
-        
-    def check_whisper_installation(self):
-        """Background check and install Whisper if needed"""
-        try:
-            global _WHISPER_AVAILABLE
-            if not _WHISPER_AVAILABLE:
-                # Ask user immediately for installation method
-                self.root.after(100, lambda: self.ask_installation_method())
-        except Exception as e:
-            print(f"Whisper check error: {e}")
-    
-    def ask_installation_method(self):
-        """Ask user which installation method to use"""
-        result = messagebox.askyesnocancel(
-            "Whisper STT 설치 필요",
-            "Whisper STT가 설치되지 않았습니다.\n\n"
-            "터미널 창에서 설치를 진행하시겠습니까?\n"
-            "(설치 과정을 실시간으로 확인할 수 있습니다)\n\n"
-            "Yes: 터미널에서 설치\n"
-            "No: 백그라운드 설치 (보이지 않음)\n"
-            "Cancel: 나중에 설치"
-        )
-        
-        global _WHISPER_AVAILABLE
-        
-        if result is True:  # Yes - Terminal installation
-            _WHISPER_AVAILABLE = install_whisper_with_terminal()
-            if _WHISPER_AVAILABLE:
-                self.installation_complete()
-            else:
-                self.installation_failed()
-        elif result is False:  # No - Background installation
-            self.show_background_installation()
-            # Run in thread to not block UI
-            def bg_install():
-                global _WHISPER_AVAILABLE
-                _WHISPER_AVAILABLE = install_whisper_silent()
-                if _WHISPER_AVAILABLE:
-                    self.root.after(0, lambda: self.installation_complete())
-                else:
-                    self.root.after(0, lambda: self.installation_failed())
-            threading.Thread(target=bg_install, daemon=True).start()
-        # else: Cancel - do nothing
-    
-    def show_background_installation(self):
-        """Show background installation progress"""
-        self.install_dialog = tk.Toplevel(self.root)
-        self.install_dialog.title("Whisper 설치 중")
-        self.install_dialog.geometry("400x150")
-        self.install_dialog.configure(bg=self.colors['card'])
-        self.install_dialog.transient(self.root)
-        
-        # Center the dialog
-        self.install_dialog.update_idletasks()
-        x = (self.install_dialog.winfo_screenwidth() // 2) - (400 // 2)
-        y = (self.install_dialog.winfo_screenheight() // 2) - (150 // 2)
-        self.install_dialog.geometry(f"400x150+{x}+{y}")
-        
-        tk.Label(
-            self.install_dialog,
-            text="🔄 Whisper STT 설치 중...",
-            font=('SF Pro Display', 14, 'bold'),
-            bg=self.colors['card'],
-            fg=self.colors['text']
-        ).pack(pady=(30, 10))
-        
-        tk.Label(
-            self.install_dialog,
-            text="백그라운드에서 설치 중 (최대 5분)",
-            font=('SF Pro Display', 11),
-            bg=self.colors['card'],
-            fg=self.colors['text_secondary']
-        ).pack()
-        
-        # Progress bar
-        progress = ttk.Progressbar(
-            self.install_dialog,
-            mode='indeterminate',
-            length=300
-        )
-        progress.pack(pady=20)
-        progress.start(10)
-    
-    def installation_failed(self):
-        """Show installation failure message"""
-        if hasattr(self, 'install_dialog'):
-            self.install_dialog.destroy()
-        
-        messagebox.showerror(
-            "설치 실패",
-            "Whisper 설치에 실패했습니다.\n\n"
-            "수동 설치 방법:\n"
-            "1. 터미널/명령 프롬프트 열기\n"
-            "2. 다음 명령어 실행:\n"
-            "   pip install openai-whisper"
-        )
-    
-    
-    def installation_complete(self):
-        """Close installation dialog"""
-        if hasattr(self, 'install_dialog'):
-            self.install_dialog.destroy()
-            messagebox.showinfo("설치 완료", "Whisper STT가 성공적으로 설치되었습니다!")
         
     def setup_modern_ui(self):
         # Configure styles
@@ -507,49 +203,110 @@ class ModernMP4Converter:
         )
         self.stt_check.pack(side=tk.LEFT)
         
-        # Model selection (shown when STT is enabled)
+        # STT 설정 버튼
+        self.stt_config_button = tk.Button(
+            stt_inner,
+            text="⚙️ 설정",
+            font=('SF Pro Display', 11),
+            bg=self.colors['accent'],
+            fg='white',
+            relief=tk.FLAT,
+            padx=15,
+            pady=5,
+            command=self.open_whisper_settings,
+            state=tk.DISABLED
+        )
+        self.stt_config_button.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # Model info (shown when STT is enabled)
         self.model_frame = tk.Frame(options_frame, bg=self.colors['card'], highlightbackground=self.colors['border'], highlightthickness=1)
         
         model_inner = tk.Frame(self.model_frame, bg=self.colors['card'])
         model_inner.pack(fill=tk.X, padx=15, pady=12)
         
-        tk.Label(
+        self.model_info_label = tk.Label(
             model_inner,
-            text="AI 모델:",
+            text="",
             font=('SF Pro Display', 11),
             bg=self.colors['card'],
             fg=self.colors['text_secondary']
-        ).pack(side=tk.LEFT, padx=(0, 10))
+        )
+        self.model_info_label.pack(side=tk.LEFT)
         
-        self.model_var = tk.StringVar(value='small')
-        model_buttons = [
-            ('tiny', '최고속'),
-            ('base', '빠름'),
-            ('small', '추천'),
-            ('medium', '정확'),
-            ('large-v3', '최고품질')
-        ]
+        # 모델 변경 버튼
+        tk.Button(
+            model_inner,
+            text="모델 변경",
+            font=('SF Pro Display', 10),
+            bg=self.colors['text_secondary'],
+            fg='white',
+            relief=tk.FLAT,
+            padx=10,
+            pady=3,
+            command=self.open_whisper_settings
+        ).pack(side=tk.RIGHT)
         
-        for value, label in model_buttons:
-            btn = tk.Radiobutton(
-                model_inner,
-                text=label,
-                variable=self.model_var,
-                value=value,
-                font=('SF Pro Display', 11),
-                bg=self.colors['card'],
-                fg=self.colors['text'],
-                selectcolor=self.colors['accent'],
-                activebackground=self.colors['card']
-            )
-            btn.pack(side=tk.LEFT, padx=5)
+        self.update_model_info()
     
     def toggle_stt_options(self):
         """Show/hide STT options"""
         if self.enable_stt.get():
-            self.model_frame.pack(fill=tk.X, pady=(0, 10))
+            # Whisper 설치 확인
+            if not self.check_whisper_ready():
+                # 설치 다이얼로그 표시
+                self.enable_stt.set(False)
+                self.open_whisper_settings()
+            else:
+                self.model_frame.pack(fill=tk.X, pady=(0, 10))
+                self.stt_config_button.config(state=tk.NORMAL)
         else:
             self.model_frame.pack_forget()
+            self.stt_config_button.config(state=tk.DISABLED)
+    
+    def check_whisper_ready(self):
+        """Whisper와 모델이 준비되었는지 확인"""
+        if not self.whisper_manager.is_whisper_installed():
+            return False
+        
+        # 설치된 모델 확인
+        installed_models = self.whisper_manager.get_available_models()
+        if not installed_models:
+            # 기본 모델도 없으면 False
+            return False
+        
+        # 현재 선택된 모델 설정
+        if self.whisper_manager.config.get('default_model'):
+            self.selected_model = self.whisper_manager.config['default_model']
+        elif installed_models:
+            self.selected_model = installed_models[0]
+        
+        return True
+    
+    def open_whisper_settings(self):
+        """Whisper 설정 다이얼로그 열기"""
+        def callback(installed):
+            if installed:
+                self.whisper_available = True
+                self.update_model_info()
+                # 설치 후 자동으로 STT 활성화
+                if self.check_whisper_ready():
+                    self.enable_stt.set(True)
+                    self.toggle_stt_options()
+        
+        WhisperInstallerDialog(self.root, callback)
+    
+    def update_model_info(self):
+        """모델 정보 업데이트"""
+        installed_models = self.whisper_manager.get_available_models()
+        if installed_models:
+            default_model = self.whisper_manager.config.get('default_model', installed_models[0])
+            model_info = self.whisper_manager.MODEL_SIZES.get(default_model, {})
+            
+            self.model_info_label.config(
+                text=f"현재 모델: {default_model.upper()} ({model_info.get('accuracy', '')} / {model_info.get('speed', '')})"
+            )
+        else:
+            self.model_info_label.config(text="모델이 설치되지 않았습니다")
     
     def create_progress_section(self, parent):
         """Create modern progress section"""
@@ -665,8 +422,6 @@ class ModernMP4Converter:
         # Bind hover events
         self.clear_button.bind('<Enter>', lambda e: self.clear_button.config(bg='#555555') if self.clear_button['state'] == tk.NORMAL else None)
         self.clear_button.bind('<Leave>', lambda e: self.clear_button.config(bg=self.colors['text_secondary']) if self.clear_button['state'] == tk.NORMAL else None)
-        
-        # Remove GitHub link - no replacement needed
     
     def select_files(self):
         files = filedialog.askopenfilenames(
@@ -709,6 +464,20 @@ class ModernMP4Converter:
             messagebox.showerror("오류", "ffmpeg를 찾을 수 없습니다")
             return
         
+        # STT 사용 시 모델 로드
+        if self.enable_stt.get():
+            if not self.check_whisper_ready():
+                messagebox.showwarning("STT 불가", "Whisper가 설치되지 않았습니다.\nSTT 없이 변환을 진행합니다.")
+                self.enable_stt.set(False)
+            else:
+                # 모델 미리 로드
+                try:
+                    self.status_label.config(text="AI 모델 로딩 중...")
+                    self.whisper_model = self.whisper_manager.load_model(self.selected_model)
+                except Exception as e:
+                    messagebox.showwarning("모델 로드 실패", f"AI 모델을 로드할 수 없습니다.\n{e}")
+                    self.enable_stt.set(False)
+        
         # UI update
         self.drop_frame.master.pack_forget()
         self.model_frame.pack_forget()
@@ -719,7 +488,6 @@ class ModernMP4Converter:
         
         # Start conversion
         self.is_converting = True
-        self.selected_model = self.model_var.get()
         thread = threading.Thread(target=self.convert_files)
         thread.daemon = True
         thread.start()
@@ -788,25 +556,13 @@ class ModernMP4Converter:
                 subprocess.run(cmd, capture_output=True)
                 
                 # STT if enabled
-                if self.enable_stt.get():
-                    # Check if Whisper is available
-                    global _WHISPER_AVAILABLE
-                    if not _WHISPER_AVAILABLE:
-                        # Try to install if not available
-                        self.root.after(0, lambda: messagebox.showwarning(
-                            "Whisper 미설치",
-                            "Whisper가 설치되지 않았습니다.\n"
-                            "프로그램을 재시작하면 자동 설치됩니다."
-                        ))
-                        continue
-                    
-                    self.root.after(0, lambda: self.status_label.config(
-                        text=f"🎤 음성 인식 중: {input_path.name}"
+                if self.enable_stt.get() and self.whisper_model:
+                    self.root.after(0, lambda name=input_path.name: self.status_label.config(
+                        text=f"🎤 음성 인식 중: {name}"
                     ))
                     
                     try:
-                        model = load_whisper_model(self.selected_model)
-                        result = model.transcribe(
+                        result = self.whisper_model.transcribe(
                             str(output_path),
                             language='ko',
                             fp16=False
@@ -818,8 +574,8 @@ class ModernMP4Converter:
                             with open(txt_path, 'w', encoding='utf-8') as f:
                                 f.write(text)
                             
-                            self.root.after(0, lambda: self.status_label.config(
-                                text=f"✅ 텍스트 파일 생성: {txt_path.name}"
+                            self.root.after(0, lambda name=txt_path.name: self.status_label.config(
+                                text=f"✅ 텍스트 파일 생성: {name}"
                             ))
                     except Exception as e:
                         print(f"STT error: {e}")
@@ -837,6 +593,7 @@ class ModernMP4Converter:
     
     def conversion_complete(self):
         self.is_converting = False
+        self.whisper_model = None  # 모델 메모리 해제
         messagebox.showinfo("완료", "모든 파일 변환이 완료되었습니다!")
         self.clear_files()
 

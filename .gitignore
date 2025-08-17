@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# Local build artifacts
+MP4toMP3_Installer.dmg
+Windows_Standalone_Builder.zip
+
+# Logs
+*.log

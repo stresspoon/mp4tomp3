@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(python3:*)",
+      "Bash(brew install:*)",
+      "Bash(mkdir:*)",
+      "Bash(./make_icon.sh:*)",
+      "Bash(open MP4toMP3.app)",
+      "Bash(./create_dmg.sh:*)",
+      "Bash(curl:*)",
+      "Bash(unzip:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)",
+      "Bash(MP4toMP3.app/Contents/MacOS/ffmpeg -version)",
+      "Bash(killall:*)",
+      "Bash(zip:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

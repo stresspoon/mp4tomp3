@@ -47,7 +47,7 @@ jobs:
           --collect-all torch `
           --name MP4toMP3 `
           --windowed `
-          --icon icon.ico `
+          `
           converter_standalone.py
     
     - name: Upload Windows Executable
@@ -95,7 +95,7 @@ jobs:
           --collect-all torch \
           --name MP4toMP3 \
           --windowed \
-          --icon icon.icns \
+          \
           --osx-bundle-identifier com.mp4tomp3.converter \
           converter_standalone.py
     

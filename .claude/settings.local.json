@@ -21,7 +21,10 @@
       "Bash(git push:*)",
       "Bash(cat:*)",
       "Bash(pkill:*)",
-      "Bash(open /Users/designers/Projects/mp4tomp3/MP4toMP3.app)"
+      "Bash(open /Users/designers/Projects/mp4tomp3/MP4toMP3.app)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []

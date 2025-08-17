@@ -108,6 +108,11 @@ class MP4toMP3Converter:
         self.is_converting = False
         
         self.setup_ui()
+        # Prefetch whisper model right after UI is ready (first app launch)
+        try:
+            self.root.after(100, self._start_model_prefetch)
+        except Exception:
+            pass
         
     def setup_ui(self):
         # Title / Theme / Font setup
@@ -172,6 +177,11 @@ class MP4toMP3Converter:
         sys_info = get_system_info()
         self.model_recommended = recommend_model(sys_info)
         self.model_var.set(self.model_recommended)
+        # Prefetch when model selection changes, too
+        try:
+            self.model_combo.bind('<<ComboboxSelected>>', lambda e: self._start_model_prefetch())
+        except Exception:
+            pass
         self.enable_stt = tk.BooleanVar(value=False)
         tk.Label(options_frame, text=f"추천: {self.model_recommended} (RAM: {sys_info.get('ram_gb','?')}GB)", font=(font_family, 10), bg='#f2f1ef', fg='#131313').pack(side=tk.LEFT)
         self.stt_check = tk.Checkbutton(options_frame, text='STT (텍스트 생성)', variable=self.enable_stt, bg='#f2f1ef', fg='#131313', selectcolor='#f2f1ef', activebackground='#f2f1ef')

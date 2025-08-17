@@ -28,6 +28,9 @@ class WhisperManager:
         self.app_dir = Path.home() / '.mp4tomp3'
         self.models_dir = self.app_dir / 'models'
         self.models_dir.mkdir(parents=True, exist_ok=True)
+        # 전용 가상환경(venv)
+        self.venv_dir = self.app_dir / 'venv'
+        self.venv_python = self._resolve_venv_python()
         
         self.config_file = self.app_dir / 'config.json'
         self.last_error = ""
@@ -49,32 +52,66 @@ class WhisperManager:
         """설정 저장"""
         with open(self.config_file, 'w') as f:
             json.dump(self.config, f, indent=2)
+
+    def _resolve_venv_python(self) -> Path:
+        """가상환경 파이썬 경로 계산"""
+        if sys.platform.startswith('win'):
+            return self.venv_dir / 'Scripts' / 'python.exe'
+        else:
+            # python3 또는 python
+            p3 = self.venv_dir / 'bin' / 'python3'
+            p = self.venv_dir / 'bin' / 'python'
+            return p3 if p3.exists() else p
+
+    def ensure_venv(self, progress_callback=None) -> bool:
+        """전용 venv 생성 및 기본 업그레이드"""
+        try:
+            if not self.venv_dir.exists() or not self.venv_python.exists():
+                if progress_callback:
+                    progress_callback(3, '전용 환경 생성 중...')
+                result = subprocess.run([sys.executable, '-m', 'venv', str(self.venv_dir)], capture_output=True, text=True)
+                if result.returncode != 0:
+                    self.last_error = result.stderr or result.stdout or ''
+                    if progress_callback:
+                        progress_callback(0, f'venv 생성 실패: {self.last_error[:200]}')
+                    return False
+            # pip 업그레이드
+            if progress_callback:
+                progress_callback(6, 'pip 업그레이드 중...')
+            up = subprocess.run([str(self.venv_python), '-m', 'pip', 'install', '-U', 'pip', 'setuptools', 'wheel'], capture_output=True, text=True)
+            if up.returncode != 0:
+                # 치명적이지 않음 - 계속 진행
+                self.last_error = up.stderr or up.stdout or ''
+            return True
+        except Exception as e:
+            self.last_error = str(e)
+            return False
     
     def is_whisper_installed(self):
-        """Whisper 라이브러리 설치 확인"""
-        try:
-            import whisper
-            return True
-        except ImportError:
+        """Whisper 라이브러리 설치 확인 (전용 venv 기준)"""
+        if not self.venv_python.exists():
             return False
+        result = subprocess.run([str(self.venv_python), '-c', 'import whisper,sys;print("ok")'], capture_output=True, text=True)
+        return result.returncode == 0 and 'ok' in (result.stdout or '')
     
     def install_whisper_minimal(self, progress_callback=None):
         """Whisper + Torch(CPU) 사용자 영역에 설치. 권한 문제 최소화/안정성 향상."""
         try:
+            # 전용 venv 보장
+            if not self.ensure_venv(progress_callback):
+                return False
             env = os.environ.copy()
             env.setdefault('PIP_DISABLE_PIP_VERSION_CHECK', '1')
-            # 1) Whisper 설치 (의존성 포함, --user)
+            # 1) Whisper 설치 (전용 venv)
             if progress_callback:
                 progress_callback(5, "Whisper 설치 준비...")
-            cmd_whisper = [
-                sys.executable, '-m', 'pip', 'install', '-U', '--user', 'openai-whisper'
-            ]
+            cmd_whisper = [str(self.venv_python), '-m', 'pip', 'install', '-U', 'openai-whisper']
             result = subprocess.run(cmd_whisper, capture_output=True, text=True, timeout=900, env=env)
             if result.returncode != 0:
                 # Fallback: GitHub 소스에서 설치
                 if progress_callback:
                     progress_callback(10, "Whisper 소스 설치 시도...")
-                fallback = [sys.executable, '-m', 'pip', 'install', '--user', 'git+https://github.com/openai/whisper.git']
+                fallback = [str(self.venv_python), '-m', 'pip', 'install', 'git+https://github.com/openai/whisper.git']
                 result_fb = subprocess.run(fallback, capture_output=True, text=True, timeout=900, env=env)
                 if result_fb.returncode != 0:
                     err = (result_fb.stderr or result_fb.stdout or result.stderr or '')
@@ -85,9 +122,7 @@ class WhisperManager:
             if progress_callback:
                 progress_callback(40, "PyTorch(CPU) 설치 중...")
             # 2) Torch CPU 설치 (torchaudio는 플랫폼에 따라 선택)
-            cmd_torch = [
-                sys.executable, '-m', 'pip', 'install', '--user', 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu'
-            ]
+            cmd_torch = [str(self.venv_python), '-m', 'pip', 'install', 'torch', '--index-url', 'https://download.pytorch.org/whl/cpu']
             result_t = subprocess.run(cmd_torch, capture_output=True, text=True, timeout=900, env=env)
             if result_t.returncode != 0:
                 err = (result_t.stderr or result_t.stdout or '')
@@ -98,7 +133,7 @@ class WhisperManager:
             # torchaudio는 선택 설치 (실패해도 계속)
             if progress_callback:
                 progress_callback(70, "선택 패키지 설치...")
-            ta = subprocess.run([sys.executable, '-m', 'pip', 'install', '--user', 'torchaudio', '--index-url', 'https://download.pytorch.org/whl/cpu'], capture_output=True, text=True, timeout=600, env=env)
+            ta = subprocess.run([str(self.venv_python), '-m', 'pip', 'install', 'torchaudio', '--index-url', 'https://download.pytorch.org/whl/cpu'], capture_output=True, text=True, timeout=600, env=env)
             if ta.returncode != 0:
                 # 비치명적 오류 기록만
                 self.last_error = (ta.stderr or ta.stdout or '')
@@ -201,6 +236,39 @@ class WhisperManager:
         else:
             # 자동 다운로드 (Whisper 기본)
             return whisper.load_model(model_name)
+
+    def transcribe_cli(self, audio_path: str, model_name: str = 'small', language: str = 'ko', output_dir: str = None) -> str:
+        """전용 venv의 whisper CLI로 전사 수행. txt 내용을 반환."""
+        try:
+            if not self.ensure_venv():
+                return ''
+            if not self.is_whisper_installed():
+                ok = self.install_whisper_minimal()
+                if not ok:
+                    return ''
+            if output_dir is None:
+                output_dir = str(Path(audio_path).parent)
+            cmd = [
+                str(self.venv_python), '-m', 'whisper', audio_path,
+                '--model', model_name,
+                '--language', language,
+                '--device', 'cpu',
+                '--fp16', 'False',
+                '--task', 'transcribe',
+                '--output_format', 'txt',
+                '--output_dir', output_dir
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            # Find txt file
+            base = Path(audio_path).with_suffix('').name
+            txt_path = Path(output_dir) / f"{base}.txt"
+            if txt_path.exists():
+                return txt_path.read_text(encoding='utf-8').strip()
+            # If not found, parse stdout
+            return (result.stdout or '').strip()
+        except Exception as e:
+            self.last_error = str(e)
+            return ''
 
     def get_last_error(self) -> str:
         return self.last_error or ""

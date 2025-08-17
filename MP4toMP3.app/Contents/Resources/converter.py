@@ -714,13 +714,10 @@ class ModernMP4Converter:
                     ))
                     
                     try:
-                        result = self.whisper_model.transcribe(
-                            str(output_path),
-                            language='ko',
-                            fp16=False
+                        # 전용 venv 기반 CLI로 전사 (권한/환경 충돌 회피)
+                        text = self.whisper_manager.transcribe_cli(
+                            str(output_path), model_name=self.selected_model.get(), language='ko', output_dir=str(input_path.parent)
                         )
-                        
-                        text = result.get('text', '').strip()
                         if text:
                             txt_path = input_path.with_suffix('.txt')
                             with open(txt_path, 'w', encoding='utf-8') as f:

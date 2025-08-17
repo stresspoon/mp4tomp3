@@ -650,6 +650,21 @@ class MP4toMP3Converter:
                     self.root.after(0, self.update_progress_complete, i + 1, overall_percent)
                     self.root.update_idletasks()
                     time.sleep(0.05)
+
+                    # STT: Whisper 전사 (옵션)
+                    if getattr(self, 'enable_stt', tk.BooleanVar(value=False)).get():
+                        try:
+                            self.status_label.config(text=f"STT 전사 중: {input_path.name}")
+                            self.root.update_idletasks()
+                            model, device = load_whisper_model(self.selected_model or 'small')
+                            result_txt = model.transcribe(str(output_path))
+                            text = result_txt.get('text', '').strip()
+                            if text:
+                                with open(str(input_path.with_suffix('.txt')), 'w', encoding='utf-8') as f:
+                                    f.write(text)
+                        except Exception as stt_err:
+                            self.status_label.config(text=f"STT 실패: {stt_err}")
+                            self.root.update_idletasks()
                 else:
                     failed_files.append(input_path.name)
                     
@@ -766,10 +781,23 @@ class MP4toMP3Converter:
         total = len(self.files_to_convert)
         
         if success_count == total:
-            messagebox.showinfo(
-                "완료",
-                f"✅ {success_count}개 파일 변환 완료!\n\nMP3 파일이 원본 파일과 같은 위치에 저장되었습니다."
-            )
+            # 작은 팝업과 '폴더 열기' 버튼 제공
+            popup = tk.Toplevel(self.root)
+            popup.title('완료')
+            popup.configure(bg='#f2f1ef')
+            msg = tk.Label(popup, text=f"✅ {success_count}개 파일 변환 완료!\n\nMP3 파일이 원본 파일과 같은 위치에 저장되었습니다.", bg='#f2f1ef', fg='#131313')
+            msg.pack(padx=20, pady=12)
+            folder = None
+            if self.files_to_convert:
+                folder = str(Path(self.files_to_convert[-1]).parent)
+            def _open_and_close():
+                if folder and os.path.isdir(folder):
+                    try:
+                        subprocess.run(['open', folder])
+                    except Exception:
+                        pass
+                popup.destroy()
+            tk.Button(popup, text='폴더 열기', bg='#ff3d00', fg='white', relief=tk.FLAT, command=_open_and_close).pack(pady=(0, 12))
         else:
             message = f"변환 완료: {success_count}/{total}\n"
             if failed_files:

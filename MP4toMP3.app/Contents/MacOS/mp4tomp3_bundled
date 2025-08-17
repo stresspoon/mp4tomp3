@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+import sys
+import os
+from pathlib import Path
+
+# 앱 경로 설정
+app_dir = Path(__file__).parent.parent
+resources_dir = app_dir / "Resources"
+
+# 번들된 가상환경 Python 사용
+whisper_bundle = resources_dir / "whisper_bundle"
+venv_python = whisper_bundle / "venv" / "bin" / "python"
+
+if not venv_python.exists():
+    # Windows
+    venv_python = whisper_bundle / "venv" / "Scripts" / "python.exe"
+
+# converter 실행
+converter_path = resources_dir / "converter_bundled.py"
+
+if venv_python.exists() and converter_path.exists():
+    os.execv(str(venv_python), [str(venv_python), str(converter_path)])
+else:
+    print("번들된 환경을 찾을 수 없습니다")
+    sys.exit(1)

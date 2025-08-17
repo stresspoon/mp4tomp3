@@ -297,9 +297,12 @@ class MP4toMP3Converter:
         if getattr(sys, 'frozen', False):
             # Running as compiled executable
             app_dir = os.path.dirname(sys.executable)
+            # PyInstaller onefile extraction dir
+            meipass_dir = getattr(sys, '_MEIPASS', None)
         else:
             # Running as script
             app_dir = os.path.dirname(os.path.abspath(__file__))
+            meipass_dir = None
         
         # Check different locations based on OS
         if platform.system() == 'Windows':
@@ -308,12 +311,22 @@ class MP4toMP3Converter:
                 os.path.join(app_dir, ffmpeg_name),
                 os.path.join(app_dir, 'bin', ffmpeg_name),
             ]
+            if meipass_dir:
+                possible_paths.extend([
+                    os.path.join(meipass_dir, ffmpeg_name),
+                    os.path.join(meipass_dir, 'bin', ffmpeg_name),
+                ])
         else:
             ffmpeg_name = 'ffmpeg'
             possible_paths = [
                 os.path.join(app_dir, ffmpeg_name),
                 os.path.join(os.path.dirname(app_dir), 'MacOS', ffmpeg_name),
             ]
+            if meipass_dir:
+                possible_paths.extend([
+                    os.path.join(meipass_dir, ffmpeg_name),
+                    os.path.join(meipass_dir, 'bin', ffmpeg_name),
+                ])
         
         for path in possible_paths:
             if os.path.exists(path):

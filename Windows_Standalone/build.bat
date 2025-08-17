@@ -68,6 +68,16 @@ if exist dist\MP4toMP3.exe (
     echo No installation needed!
     echo Just run MP4toMP3.exe
     echo =========================================
+
+    echo.
+    echo Packaging release zip...
+    if exist dist\MP4toMP3_Windows.zip del /f /q dist\MP4toMP3_Windows.zip >nul 2>&1
+    powershell -Command "Compress-Archive -Path 'dist/MP4toMP3.exe' -DestinationPath 'dist/MP4toMP3_Windows.zip' -Force"
+    if exist dist\MP4toMP3_Windows.zip (
+        echo Release zip created: dist\MP4toMP3_Windows.zip
+    ) else (
+        echo [WARN] Failed to create release zip. Please zip dist\MP4toMP3.exe manually.
+    )
 ) else (
     echo.
     echo [ERROR] Build failed

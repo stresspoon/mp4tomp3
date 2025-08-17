@@ -24,11 +24,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller pillow openai-whisper torch --extra-index-url https://download.pytorch.org/whl/cpu
           cd Windows_Standalone
+          
+          # Create placeholder font file if it doesn't exist
+          if (!(Test-Path "Pretendard.ttf")) {
+            Write-Host "Creating placeholder Pretendard.ttf"
+            New-Item -Path "Pretendard.ttf" -ItemType File -Force
+            "placeholder" | Out-File -FilePath "Pretendard.ttf" -NoNewline
+          }
+          
           pyinstaller --onefile `
             --windowed `
             --name "MP4toMP3" `
             --add-binary "ffmpeg.exe;." `
-            --add-data "Pretendard.ttf;." `
             --hidden-import "tkinter" `
             --hidden-import "tkinter.ttk" `
             --hidden-import "tkinter.filedialog" `
